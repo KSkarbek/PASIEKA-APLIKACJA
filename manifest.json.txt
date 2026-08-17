@@ -1,0 +1,21 @@
+{
+  "short_name": "Pasieka",
+  "name": "Asystent Pasieki WLKP",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2312/2312218.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2312/2312218.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "start_url": "./index.html",
+  "background_color": "#ffffff",
+  "theme_color": "#f59e0b",
+  "display": "standalone",
+  "orientation": "portrait"
+}
