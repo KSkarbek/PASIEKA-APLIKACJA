@@ -1,10 +1,14 @@
 /**
  * ZOPTYMALIZOWANA LOGIKA APLIKACJI ASYSTENT PASIEKA WLKP - 18 ULI (APLIK PASIEKA)
- * Kompletny moduł z obsługą kart: Przeglądy, Karmienie, Leczenie oraz synchronizacji Google Sheets.
+ * Kompletny moduł z obsługą kart: Przeglądy, Karmienie, Leczenie oraz stalej synchronizacji Google Sheets.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
   const TOTAL_HIVES = 18;
+  
+  // STAŁA WARTOŚĆ DOMYŚLNA WEBHOOKA (Zabezpieczenie przed czyszczeniem localStorage na telefonie)
+  const DEFAULT_WEBHOOK = 'https://script.google.com/macros/s/AKfycbyQQL4WLtFXlgo0nuvtGSzWxvoxfqbA0sK0zf_Hh7bflcwsNxZ9UM73leN_kEHWc0yNtw/exec';
+
   const KEYS = {
     INSPECTIONS: 'pasieka_wlkp_inspections_v1',
     FEEDINGS: 'pasieka_wlkp_feedings_v1',
@@ -14,6 +18,11 @@ document.addEventListener('DOMContentLoaded', () => {
     THEME: 'pasieka_theme_mode',
     WEBHOOK: 'pasieka_gsheet_webhook_v1'
   };
+
+  // Funkcja bezpiecznego pobierania URL Webhooka
+  function getWebhookUrl() {
+    return localStorage.getItem(KEYS.WEBHOOK) || DEFAULT_WEBHOOK;
+  }
 
   // === INTERFEJS I/O (STORAGE) ===
   const Store = {
@@ -101,8 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initVoiceRecognition();
 
   if (DOM.webhook) {
-    const savedUrl = localStorage.getItem(KEYS.WEBHOOK);
-    if (savedUrl) DOM.webhook.value = savedUrl;
+    DOM.webhook.value = getWebhookUrl();
   }
 
   // Obsługa zwijania instrukcji Google Sheets
@@ -113,7 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // FIZYCZNY ZAPIS LINKU WEBHOOKA
+  // Zapis linku Webhooka
   if (DOM.btnSaveWebhook && DOM.webhook) {
     DOM.btnSaveWebhook.addEventListener('click', (e) => {
       e.preventDefault();
@@ -126,7 +134,8 @@ document.addEventListener('DOMContentLoaded', () => {
         fetchFromGoogleSheets().catch(() => {});
       } else if (url === '') {
         localStorage.removeItem(KEYS.WEBHOOK);
-        alert('🗑️ Usunięto link synchronizacji.');
+        DOM.webhook.value = DEFAULT_WEBHOOK;
+        alert('🔄 Przywrócono domyślny link synchronizacji.');
       } else {
         alert('⚠️ Niepoprawny format! Link musi rozpoczynać się od: https://script.google.com/macros/s/');
       }
@@ -136,10 +145,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Przycisk ręcznej synchronizacji
   if (DOM.btnSyncNow) {
     DOM.btnSyncNow.addEventListener('click', () => {
-      const url = localStorage.getItem(KEYS.WEBHOOK);
+      const url = getWebhookUrl();
       if (!url) {
-        alert('Wklej najpierw URL z Apps Script w sekcji konfiguracji.');
-        if (DOM.gsheetScriptDetails) DOM.gsheetScriptDetails.classList.remove('hidden');
+        alert('Brak skonsolidowanego adresu URL.');
         return;
       }
 
@@ -640,7 +648,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // === INTEGRACJA GOOGLE SHEETS ===
   function sendToGoogleSheets(record, type = 'inspection') {
-    const url = localStorage.getItem(KEYS.WEBHOOK);
+    const url = getWebhookUrl();
     if (!url || record._synced) return;
 
     const payload = {
@@ -665,7 +673,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function fetchFromGoogleSheets() {
-    const url = localStorage.getItem(KEYS.WEBHOOK);
+    const url = getWebhookUrl();
     if (!url) return Promise.reject();
     return fetch(url).then(r => r.json()).then(remote => {
       let added = 0;
