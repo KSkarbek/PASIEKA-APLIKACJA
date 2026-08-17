@@ -77,7 +77,13 @@ document.addEventListener('DOMContentLoaded', () => {
     sheetTbody: qsid('sheet-tbody'), feedTbody: qsid('tab-feeding-tbody'), mainFeedTbody: qsid('feedings-tbody'),
     treatTbody: qsid('tab-treatment-tbody'), mainTreatTbody: qsid('treatments-tbody'),
     filterHive: qsid('filter-hive-select'), filterFeed: qsid('filter-tab-feeding-select'),
+    
+    // Webhook i Synchronizacja
     webhook: qsid('input-gsheet-webhook'),
+    btnSaveWebhook: qsid('btn-save-webhook'),
+    btnShowGsheetScript: qsid('btn-show-gsheet-script'),
+    gsheetScriptDetails: qsid('gsheet-script-details'),
+    btnSyncNow: qsid('btn-sync-now'),
     
     // Wrappery Tabel
     wrapInsp: qsid('wrapper-inspections-table'), wrapFeed: qsid('wrapper-feedings-table'), wrapTreat: qsid('wrapper-treatments-table'),
@@ -94,7 +100,73 @@ document.addEventListener('DOMContentLoaded', () => {
   renderSheetTable();
   initVoiceRecognition();
 
-  if (DOM.webhook) DOM.webhook.value = localStorage.getItem(KEYS.WEBHOOK) || '';
+  if (DOM.webhook) {
+    const savedUrl = localStorage.getItem(KEYS.WEBHOOK);
+    if (savedUrl) DOM.webhook.value = savedUrl;
+  }
+
+  // Obsługa zwijania instrukcji Google Sheets
+  if (DOM.btnShowGsheetScript && DOM.gsheetScriptDetails) {
+    DOM.btnShowGsheetScript.addEventListener('click', (e) => {
+      e.preventDefault();
+      DOM.gsheetScriptDetails.classList.toggle('hidden');
+    });
+  }
+
+  // FIZYCZNY ZAPIS LINKU WEBHOOKA
+  if (DOM.btnSaveWebhook && DOM.webhook) {
+    DOM.btnSaveWebhook.addEventListener('click', (e) => {
+      e.preventDefault();
+      const url = DOM.webhook.value.trim();
+
+      if (url.startsWith('https://script.google.com/macros/s/')) {
+        localStorage.setItem(KEYS.WEBHOOK, url);
+        alert('✅ Zapisano link webhooka Google Sheets!');
+        speakText('Zapisano połączenie z Google Sheets.');
+        fetchFromGoogleSheets().catch(() => {});
+      } else if (url === '') {
+        localStorage.removeItem(KEYS.WEBHOOK);
+        alert('🗑️ Usunięto link synchronizacji.');
+      } else {
+        alert('⚠️ Niepoprawny format! Link musi rozpoczynać się od: https://script.google.com/macros/s/');
+      }
+    });
+  }
+
+  // Przycisk ręcznej synchronizacji
+  if (DOM.btnSyncNow) {
+    DOM.btnSyncNow.addEventListener('click', () => {
+      const url = localStorage.getItem(KEYS.WEBHOOK);
+      if (!url) {
+        alert('Wklej najpierw URL z Apps Script w sekcji konfiguracji.');
+        if (DOM.gsheetScriptDetails) DOM.gsheetScriptDetails.classList.remove('hidden');
+        return;
+      }
+
+      DOM.btnSyncNow.disabled = true;
+      DOM.btnSyncNow.textContent = '⏳ Synchronizacja...';
+
+      // Wysyłka niezsynchronizowanych
+      inspections.filter(r => !r._synced).forEach(rec => sendToGoogleSheets(rec, 'inspection'));
+      feedings.filter(r => !r._synced).forEach(rec => sendToGoogleSheets(rec, 'feeding'));
+      treatments.filter(r => !r._synced).forEach(rec => sendToGoogleSheets(rec, 'treatment'));
+
+      fetchFromGoogleSheets()
+        .then(addedCount => {
+          alert(`Synchronizacja dwukierunkowa zakończona sukcesem!\n• Pobrano nowych wpisów z arkusza: ${addedCount}`);
+          speakText('Pomyślnie zsynchronizowano dane z Google Sheets.');
+        })
+        .catch(err => {
+          console.error(err);
+          alert('Wystąpił błąd podczas pobierania danych z Google Sheets.');
+        })
+        .finally(() => {
+          DOM.btnSyncNow.disabled = false;
+          DOM.btnSyncNow.textContent = '🔄 Synchronizuj z Google Sheets';
+        });
+    });
+  }
+
   setTimeout(() => fetchFromGoogleSheets().catch(() => {}), 1500);
 
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(console.error);
@@ -301,7 +373,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // === RENDERING (DOCUMENT FRAGMENTS) ===
+  // === RENDERING ===
   function renderHivesGrid() {
     updateHiveSelects();
     [DOM.grids.dom, DOM.grids.zbior, DOM.grids.las].forEach(g => g && (g.innerHTML = ''));
