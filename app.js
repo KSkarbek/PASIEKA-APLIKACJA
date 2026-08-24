@@ -1,6 +1,6 @@
 /**
  * ZOPTYMALIZOWANA LOGIKA APLIKACJI ASYSTENT PASIEKA WLKP - 18 ULI (APLIK PASIEKA)
- * Kompletny moduł z obsługą kart: Przeglądy, Karmienie, Leczenie oraz stalej synchronizacji Google Sheets.
+ * Kompletny moduł z obsługą kart: Przeglądy, Karmienie, Leczenie, natywną wysyłką mobilną (sendBeacon) i stałą synchronizacją Google Sheets.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -19,7 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
     WEBHOOK: 'pasieka_gsheet_webhook_v1'
   };
 
-  // Funkcja bezpiecznego pobierania URL Webhooka
+  // Bezpieczne pobieranie URL Webhooka
   function getWebhookUrl() {
     return localStorage.getItem(KEYS.WEBHOOK) || DEFAULT_WEBHOOK;
   }
@@ -113,7 +113,7 @@ document.addEventListener('DOMContentLoaded', () => {
     DOM.webhook.value = getWebhookUrl();
   }
 
-  // Obsługa zwijania instrukcji Google Sheets
+  // Zwijanie instrukcji Google Sheets
   if (DOM.btnShowGsheetScript && DOM.gsheetScriptDetails) {
     DOM.btnShowGsheetScript.addEventListener('click', (e) => {
       e.preventDefault();
@@ -147,7 +147,7 @@ document.addEventListener('DOMContentLoaded', () => {
     DOM.btnSyncNow.addEventListener('click', () => {
       const url = getWebhookUrl();
       if (!url) {
-        alert('Brak skonsolidowanego adresu URL.');
+        alert('Brak skonfigurowanego adresu URL.');
         return;
       }
 
@@ -179,7 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(console.error);
 
-  // === EVENT LISTENERS (Delegacja zdarzeń) ===
+  // === EVENT LISTENERS ===
   DOM.tabs.forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
 
   if (DOM.cbRamkiNw) {
@@ -232,7 +232,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Zmiany w Selectach
+  // Selecty
   if (DOM.selHive) DOM.selHive.addEventListener('change', e => qsid('form-hive-title').textContent = `Przegląd: ${getHiveName(e.target.value)}`);
   if (DOM.selFeedHive) DOM.selFeedHive.addEventListener('change', e => qsid('form-feeding-title').textContent = `🍯 Karmienie: ${getHiveName(e.target.value)}`);
   if (DOM.selTreatHive) DOM.selTreatHive.addEventListener('change', e => qsid('form-treatment-title').textContent = `💉 Leczenie: ${getHiveName(e.target.value)}`);
@@ -240,7 +240,6 @@ document.addEventListener('DOMContentLoaded', () => {
   if (DOM.filterHive) DOM.filterHive.addEventListener('change', () => { renderSheetTable(); renderFeedingsTable(); renderTreatmentsTable(); });
   if (DOM.filterFeed) DOM.filterFeed.addEventListener('change', renderTabFeedingTable);
 
-  // Przełączniki widoku tabel w zakładce Arkusz
   if (DOM.btnVInsp && DOM.btnVFeed && DOM.btnVTreat) {
     DOM.btnVInsp.addEventListener('click', () => toggleTableViews('insp'));
     DOM.btnVFeed.addEventListener('click', () => toggleTableViews('feed'));
@@ -646,28 +645,46 @@ document.addEventListener('DOMContentLoaded', () => {
     if (n !== null) { hiveQueens[id] = n.trim(); Store.set(KEYS.QUEENS, hiveQueens); renderHivesGrid(); renderSheetTable(); }
   }
 
-  // === INTEGRACJA GOOGLE SHEETS ===
+  // === INTEGRACJA GOOGLE SHEETS (HYBRYDA MOBILNA SENDBEACON + FETCH) ===
+  function saveLocalRecordState(type) {
+    if (type === 'inspection') Store.set(KEYS.INSPECTIONS, inspections);
+    if (type === 'feeding') Store.set(KEYS.FEEDINGS, feedings);
+    if (type === 'treatment') Store.set(KEYS.TREATMENTS, treatments);
+  }
+
   function sendToGoogleSheets(record, type = 'inspection') {
     const url = getWebhookUrl();
     if (!url || record._synced) return;
 
-    const payload = {
+    const payloadObj = {
       ...record,
       type: type,
       timestamp: formatPL(record.timestamp)
     };
+    const payloadStr = JSON.stringify(payloadObj);
 
+    // 1. Natywny interfejs sendBeacon dla sieci mobilnych (omija bloki 302/CORS)
+    if (navigator.sendBeacon) {
+      const blob = new Blob([payloadStr], { type: 'text/plain;charset=UTF-8' });
+      const sent = navigator.sendBeacon(url, blob);
+      if (sent) {
+        record._synced = true;
+        saveLocalRecordState(type);
+        return;
+      }
+    }
+
+    // 2. Fallback Fetch API
     fetch(url, {
       method: 'POST',
       mode: 'no-cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      cache: 'no-cache',
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+      body: payloadStr
     })
     .then(() => {
       record._synced = true;
-      if (type === 'inspection') Store.set(KEYS.INSPECTIONS, inspections);
-      if (type === 'feeding') Store.set(KEYS.FEEDINGS, feedings);
-      if (type === 'treatment') Store.set(KEYS.TREATMENTS, treatments);
+      saveLocalRecordState(type);
     })
     .catch(console.error);
   }
