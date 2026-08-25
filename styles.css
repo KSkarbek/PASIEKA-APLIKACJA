@@ -1,68 +1,62 @@
-/* STYLE DLA APLIKACJI PASIEKA WLKP - 10 ULI */
+/* ==========================================================================
+   PASIEKA WLKP - KOMPLETNY ARKUSZ STYLÓW (STYLES.CSS)
+   ========================================================================== */
 
+/* --- 1. ZMIENNE I MOTYWY --- */
 :root {
-  --primary: #d97706;        /* Ciepły bursztynowy / miodowy */
-  --primary-hover: #b45309;
-  --primary-light: #fef3c7;
+  --primary: #f59e0b;
+  --primary-hover: #d97706;
   --bg-color: #f8fafc;
   --card-bg: #ffffff;
   --text-main: #1e293b;
   --text-muted: #64748b;
   --border-color: #e2e8f0;
-
-  --pos-color: #16a34a;      /* Zielony dla TAK / OK */
-  --pos-bg: #dcfce7;
-  --neg-color: #dc2626;      /* Czerwony dla NIE / BRAK */
-  --neg-bg: #fee2e2;
-
-  --font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.1);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   --radius: 12px;
 }
 
-/* TRYB CIEMNY / DLA SŁOŃCA Z WYSOKIM KONTRASTEM */
 body.dark-mode {
   --bg-color: #0f172a;
   --card-bg: #1e293b;
   --text-main: #f8fafc;
   --text-muted: #94a3b8;
   --border-color: #334155;
-  --primary-light: #451a03;
+  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
 }
 
+/* --- 2. RESET I BAZA --- */
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  -webkit-tap-highlight-color: transparent;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 body {
-  font-family: var(--font-family);
   background-color: var(--bg-color);
   color: var(--text-main);
-  line-height: 1.5;
-  padding-bottom: 40px;
-}
-
-.app-container {
-  max-width: 960px;
-  margin: 0 auto;
   padding: 12px;
+  line-height: 1.5;
+  transition: background-color 0.2s, color 0.2s;
 }
 
-/* NAGŁÓWEK */
+.hidden {
+  display: none !important;
+}
+
+/* --- 3. NAGŁÓWEK I ASYSTENT GŁOSOWY --- */
 .app-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
   background: var(--card-bg);
-  padding: 16px 20px;
+  padding: 16px;
   border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow);
+  margin-bottom: 12px;
   border: 1px solid var(--border-color);
-  margin-bottom: 16px;
 }
 
 .logo-area {
@@ -72,138 +66,81 @@ body {
 }
 
 .bee-icon {
-  font-size: 2.2rem;
-  background: #fef3c7;
-  padding: 6px 10px;
-  border-radius: 50%;
+  font-size: 2rem;
 }
 
 .app-header h1 {
   font-size: 1.4rem;
-  font-weight: 700;
-  color: var(--primary-hover);
-}
-
-body.dark-mode .app-header h1 {
-  color: #fbbf24;
+  line-height: 1.1;
 }
 
 .subtitle {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: var(--text-muted);
 }
 
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
-.btn-gsheet {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: #10b981;
-  color: #ffffff;
-  border: 1px solid #059669;
-  padding: 8px 14px;
-  border-radius: 20px;
-  font-weight: 700;
-  font-size: 0.85rem;
-  text-decoration: none;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-gsheet:hover {
-  background: #059669;
-}
-
-.btn-voice-master {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.voice-status-bar {
   background: #fef3c7;
   color: #92400e;
-  border: 2px solid #f59e0b;
-  padding: 8px 14px;
-  border-radius: 20px;
-  font-weight: 600;
-  font-size: 0.9rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-voice-master.active {
-  background: #dc2626;
-  color: #ffffff;
-  border-color: #b91c1c;
-  animation: pulse-border 1.5s infinite;
-}
-
-@keyframes pulse-border {
-  0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
-  70% { box-shadow: 0 0 0 10px rgba(220, 38, 38, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
-}
-
-/* PASEK STATUSU GŁOSU */
-.voice-status-bar {
+  border: 1px solid #fde68a;
+  padding: 10px 14px;
+  border-radius: var(--radius);
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  background: #1e293b;
-  color: #fbbf24;
-  padding: 10px 16px;
-  border-radius: 8px;
-  margin-bottom: 16px;
+  gap: 10px;
+  margin-bottom: 12px;
+  font-size: 0.9rem;
   font-weight: 600;
-  font-size: 0.95rem;
-}
-
-.voice-status-bar.hidden {
-  display: none;
 }
 
 .pulse-dot {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   background-color: #ef4444;
   border-radius: 50%;
-  display: inline-block;
-  animation: pulse 1s infinite alternate;
+  animation: pulse 1.2s infinite;
 }
 
 @keyframes pulse {
-  from { opacity: 0.3; transform: scale(0.9); }
-  to { opacity: 1; transform: scale(1.2); }
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
 }
 
-/* TAB NAVIGATION */
+/* --- 4. NAWIGACJA ZAKŁADEK --- */
 .tab-nav {
   display: flex;
-  gap: 8px;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 6px;
   margin-bottom: 16px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .tab-btn {
-  flex: 1;
-  padding: 12px 8px;
   background: var(--card-bg);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius);
   color: var(--text-main);
-  font-size: 0.95rem;
+  padding: 10px 14px;
+  border-radius: var(--radius);
   font-weight: 600;
+  font-size: 0.85rem;
   cursor: pointer;
-  transition: background-color 0.2s, border-color 0.2s;
-  text-align: center;
+  white-space: nowrap;
+  transition: all 0.2s;
 }
 
 .tab-btn.active {
   background: var(--primary);
   color: #ffffff;
-  border-color: var(--primary);
+  border-color: var(--primary-hover);
 }
 
 .tab-content {
@@ -214,602 +151,319 @@ body.dark-mode .app-header h1 {
   display: block;
 }
 
-/* ZAKŁADKA 1: 10 KAFELKÓW ULI */
+/* --- 5. SIATKA ULI I KAFELKI --- */
 .section-title {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 
-/* ZAKŁADKI I KOLORYSTRYKA DLA 3 PASIEK: DOM, ZBIÓR, LAS */
-.badge-count.group-dom {
-  background: #fef3c7;
-  color: #b45309;
-  border: 1px solid #f59e0b;
+.badge-count {
+  background: var(--border-color);
+  color: var(--text-main);
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
 }
-
-.badge-count.group-zbior {
-  background: #dcfce7;
-  color: #15803d;
-  border: 1px solid #16a34a;
-}
-
-.badge-count.group-las {
-  background: #e0f2fe;
-  color: #0369a1;
-  border: 1px solid #0284c7;
-}
-
-/* KOLORY KAFELKÓW DLA POSZCZEGÓLNYCH PASIEK */
-.hive-card.card-dom {
-  border-left: 6px solid #f59e0b;
-}
-
-.hive-card.card-zbior {
-  border-left: 6px solid #10b981;
-}
-
-.hive-card.card-las {
-  border-left: 6px solid #0284c7;
-}
-
-.hive-card.card-dom .hive-num { color: #b45309; }
-.hive-card.card-zbior .hive-num { color: #047857; }
-.hive-card.card-las .hive-num { color: #0369a1; }
 
 .hives-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 14px;
+  gap: 12px;
 }
 
 .hive-card {
   background: var(--card-bg);
   border: 1px solid var(--border-color);
   border-radius: var(--radius);
-  padding: 16px;
-  box-shadow: var(--shadow-sm);
-  position: relative;
-  transition: transform 0.2s, box-shadow 0.2s;
-  cursor: pointer;
-}
-
-.hive-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-  border-color: var(--primary);
+  padding: 12px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .hive-card-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
+  align-items: flex-start;
   border-bottom: 1px solid var(--border-color);
-  padding-bottom: 8px;
+  padding-bottom: 6px;
 }
 
 .hive-num {
-  font-size: 1.2rem;
   font-weight: 700;
-  color: var(--primary);
+  font-size: 1.05rem;
 }
 
 .last-date {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: var(--text-muted);
 }
 
 .hive-details {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 12px;
-  font-size: 0.9rem;
-  background: var(--bg-color);
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
-}
-
-.detail-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 8px;
+  font-size: 0.85rem;
 }
 
 .status-badge {
-  padding: 2px 8px;
-  border-radius: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.75rem;
   font-weight: 700;
-  font-size: 0.8rem;
 }
 
-.status-badge.pos { background: var(--pos-bg); color: var(--pos-color); }
-.status-badge.neg { background: var(--neg-bg); color: var(--neg-color); }
+.status-badge.pos { background: #dcfce7; color: #166534; }
+.status-badge.neg { background: #fee2e2; color: #991b1b; }
 
 .hive-action-text {
-  font-size: 0.85rem;
-  color: var(--text-muted);
+  font-size: 0.8rem;
   background: var(--bg-color);
-  padding: 8px;
+  padding: 6px 8px;
   border-radius: 6px;
-  margin-bottom: 12px;
-  min-height: 40px;
-  font-style: italic;
+  border: 1px solid var(--border-color);
 }
 
-.hive-card-footer {
-  display: flex;
-  gap: 8px;
-}
+/* --- 6. PRZYCISKI I FORMULARZE --- */
+.btn-primary { background: var(--primary); color: #fff; border: none; }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-small { padding: 4px 8px; font-size: 0.75rem; border-radius: 6px; cursor: pointer; border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-main); }
 
 .btn-card-action {
-  flex: 1;
-  padding: 8px;
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
-  background: var(--card-bg);
-  color: var(--text-main);
+  padding: 8px 4px;
+  border-radius: 6px;
   font-weight: 600;
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   cursor: pointer;
+  border: 1px solid var(--border-color);
+  background: var(--bg-color);
+  color: var(--text-main);
+  text-align: center;
 }
 
 .btn-card-action.primary {
-  background: var(--primary-light);
-  color: var(--primary-hover);
-  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary-hover);
 }
 
-/* CARD & FORMULARZ */
 .card {
   background: var(--card-bg);
   border: 1px solid var(--border-color);
   border-radius: var(--radius);
-  padding: 20px;
-  box-shadow: var(--shadow-sm);
+  padding: 16px;
+  box-shadow: var(--shadow);
 }
 
 .card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 18px;
-  padding-bottom: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
   border-bottom: 1px solid var(--border-color);
 }
 
-.hive-type-badge {
-  background: #fef3c7;
-  color: #b45309;
-  font-weight: 700;
-  padding: 4px 10px;
-  border-radius: 8px;
-}
-
 .form-group {
-  margin-bottom: 16px;
-}
-
-.flex-row {
   display: flex;
-  gap: 12px;
-}
-
-.flex-1 { flex: 1; }
-
-.form-grid-2col {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.box-option {
-  background: var(--bg-color);
-  padding: 12px;
-  border-radius: 10px;
-  border: 1px solid var(--border-color);
-}
-
-.group-label {
-  display: block;
-  font-weight: 600;
-  font-size: 0.9rem;
-  margin-bottom: 8px;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
 }
 
 .input-control {
   width: 100%;
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
-  background: var(--card-bg);
-  color: var(--text-main);
-  font-size: 1rem;
-}
-
-.select-lg {
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: var(--primary-hover);
-}
-
-.textarea-lg {
-  resize: vertical;
-  min-height: 100px;
-}
-
-/* TOGGLE SWITCH (TAK / NIE / OK / BRAK) */
-.toggle-switch-group {
-  display: flex;
-  gap: 8px;
-}
-
-.toggle-switch-group input[type="radio"] {
-  display: none;
-}
-
-.toggle-btn {
-  flex: 1;
-  text-align: center;
-  padding: 10px 6px;
-  border-radius: 8px;
-  border: 2px solid var(--border-color);
-  background: var(--card-bg);
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  user-select: none;
-}
-
-.toggle-switch-group input[type="radio"]:checked + .toggle-btn.pos {
-  background: var(--pos-bg);
-  color: var(--pos-color);
-  border-color: var(--pos-color);
-}
-
-.toggle-switch-group input[type="radio"]:checked + .toggle-btn.neg {
-  background: var(--neg-bg);
-  color: var(--neg-color);
-  border-color: var(--neg-color);
-}
-
-/* 5-STOPIENIOWY PRZEŁĄCZNIK RODZINA (W TYM BRAK) */
-.toggle-switch-group-4 {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  gap: 6px;
-}
-
-.toggle-switch-group-4 input[type="radio"] {
-  display: none;
-}
-
-.toggle-btn-4 {
-  text-align: center;
-  padding: 10px 4px;
-  border-radius: 8px;
-  border: 2px solid var(--border-color);
-  background: var(--card-bg);
-  font-weight: 700;
-  font-size: 0.85rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  user-select: none;
-}
-
-.toggle-switch-group-4 input[type="radio"]:checked + .toggle-btn-4.lvl-4 {
-  background: #dcfce7;
-  color: #15803d;
-  border-color: #16a34a;
-}
-
-.toggle-switch-group-4 input[type="radio"]:checked + .toggle-btn-4.lvl-3 {
-  background: #fef9c3;
-  color: #a16207;
-  border-color: #ca8a04;
-}
-
-.toggle-switch-group-4 input[type="radio"]:checked + .toggle-btn-4.lvl-2 {
-  background: #ffedd5;
-  color: #c2410c;
-  border-color: #ea580c;
-}
-
-.toggle-switch-group-4 input[type="radio"]:checked + .toggle-btn-4.lvl-1 {
-  background: #fee2e2;
-  color: #b91c1c;
-  border-color: #dc2626;
-}
-
-.toggle-switch-group-4 input[type="radio"]:checked + .toggle-btn-4.lvl-0 {
-  background: #f1f5f9;
-  color: #475569;
-  border-color: #64748b;
-}
-
-@media (max-width: 600px) {
-  .toggle-switch-group-4 {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-/* STEPPER (ILE RAMEK) */
-.stepper-control {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.btn-stepper {
-  width: 44px;
-  height: 44px;
-  font-size: 1.4rem;
-  font-weight: 700;
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
-  background: var(--card-bg);
-  color: var(--text-main);
-  cursor: pointer;
-}
-
-.input-stepper {
-  width: 60px;
-  height: 44px;
-  text-align: center;
-  font-size: 1.3rem;
-  font-weight: 700;
+  padding: 10px;
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  background: var(--card-bg);
-  color: var(--text-main);
-}
-
-.label-with-btn {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 6px;
-}
-
-.btn-dictate {
-  background: #fef3c7;
-  color: #b45309;
-  border: 1px solid #f59e0b;
-  padding: 6px 12px;
-  border-radius: 16px;
-  font-weight: 600;
-  font-size: 0.85rem;
-  cursor: pointer;
-}
-
-/* FORM ACTIONS */
-.form-actions {
-  display: flex;
-  gap: 12px;
-  margin-top: 10px;
-}
-
-.btn-primary {
-  flex: 2;
-  background: var(--primary);
-  color: #ffffff;
-  border: none;
-  padding: 14px;
-  border-radius: 10px;
-  font-size: 1.1rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.btn-primary:hover {
-  background: var(--primary-hover);
-}
-
-.btn-secondary {
-  flex: 1;
   background: var(--bg-color);
   color: var(--text-main);
-  border: 1px solid var(--border-color);
-  padding: 14px;
-  border-radius: 10px;
-  font-size: 0.95rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-/* ZAKŁADKA 3: ARKUSZ / TABELA */
-.sheet-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 16px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.sheet-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.btn-excel {
-  background: #16a34a;
-  color: white;
-  border: none;
-  padding: 10px 14px;
-  border-radius: 8px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.btn-csv {
-  background: #0284c7;
-  color: white;
-  border: none;
-  padding: 10px 14px;
-  border-radius: 8px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.btn-small {
-  background: var(--bg-color);
-  color: var(--text-main);
-  border: 1px solid var(--border-color);
-  padding: 4px 8px;
-  border-radius: 6px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.btn-small:hover {
-  background: var(--primary-light);
-  color: var(--primary-hover);
-  border-color: var(--primary);
-}
-
-.btn-import {
-  background: var(--bg-color);
-  color: var(--text-main);
-  border: 1px solid var(--border-color);
-  padding: 10px 14px;
-  border-radius: 8px;
-  font-weight: 600;
-  cursor: pointer;
-  display: inline-block;
-}
-
-.filter-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-  background: var(--bg-color);
-  padding: 10px 14px;
-  border-radius: 8px;
-}
-
-.select-sm {
-  width: auto;
-  min-width: 160px;
-}
-
-.btn-danger-outline {
-  margin-left: auto;
-  background: transparent;
-  color: var(--neg-color);
-  border: 1px solid var(--neg-color);
-  padding: 6px 12px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 0.85rem;
-}
-
-/* TABELA ARKUSZA */
-.table-responsive {
-  overflow-x: auto;
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
-}
-
-.sheet-table {
-  width: 100%;
-  border-collapse: collapse;
-  text-align: left;
   font-size: 0.9rem;
 }
 
-.sheet-table th, .sheet-table td {
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--border-color);
+.radio-group {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
-.sheet-table th {
+.radio-group label {
   background: var(--bg-color);
-  font-weight: 700;
-  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
 }
 
-.sheet-table tr:hover {
-  background: rgba(217, 119, 6, 0.05);
+.stepper-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-/* MODAL HISTORII ULA I EDYCJI */
-.modal-overlay {
+.btn-stepper {
+  width: 38px;
+  height: 38px;
+  font-size: 1.2rem;
+  font-weight: bold;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--card-bg);
+  color: var(--text-main);
+  cursor: pointer;
+}
+
+/* --- 7. MODAL --- */
+.modal {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.6);
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 999;
-  padding: 16px;
+  padding: 12px;
+  z-index: 1000;
 }
 
-.modal-overlay.hidden {
-  display: none !important;
-}
-
-.modal-card {
+.modal-content {
   background: var(--card-bg);
   border-radius: var(--radius);
-  max-width: 850px;
   width: 100%;
-  max-height: 85vh;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
-  overflow: hidden;
-  border: 1px solid var(--border-color);
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 20px;
-  background: var(--bg-color);
-  border-bottom: 1px solid var(--border-color);
-}
-
-.modal-header h3 {
-  margin: 0;
-  font-size: 1.2rem;
-  color: var(--primary-hover);
-}
-
-.modal-body {
-  padding: 20px;
+  max-width: 650px;
+  max-height: 90vh;
   overflow-y: auto;
+  padding: 16px;
+  box-shadow: var(--shadow);
 }
 
-.btn-edit-row {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-size: 1.1rem;
-  margin-right: 6px;
+/* ==========================================================================
+   8. DEDYKOWANE POPRAWKI RESPONSYWNE DLA TABELI Z HISTORIĄ (BRAVE / ANDROID)
+   ========================================================================== */
+
+#tab-sheet {
+  width: 100%;
 }
 
-/* ADAPTACYJNOŚĆ DLA TELEFONÓW */
+#tab-sheet .card {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* Górny pasek tytułu i działań w arkuszu */
+#tab-sheet .card-header {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 10px !important;
+  width: 100% !important;
+}
+
+#tab-sheet .card-header .flex-row {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  width: 100% !important;
+}
+
+#tab-sheet .card-header select,
+#tab-sheet .card-header button {
+  flex: 1 1 auto !important;
+  min-width: 140px !important;
+}
+
+/* Pasek przełączników tabel (Przeglądy / Karmienie / Leczenie) */
+#tab-sheet .tab-toggle-bar {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 6px !important;
+  width: 100% !important;
+  margin: 6px 0 !important;
+}
+
+#tab-sheet .btn-tab-toggle {
+  flex: 1 1 calc(33.33% - 6px) !important;
+  min-width: 90px !important;
+  padding: 8px 6px !important;
+  font-size: 0.8rem !important;
+  font-weight: 600 !important;
+  text-align: center !important;
+  border-radius: 8px !important;
+  border: 1px solid var(--border-color) !important;
+  background: var(--bg-color) !important;
+  color: var(--text-main) !important;
+  cursor: pointer !important;
+}
+
+#tab-sheet .btn-tab-toggle.active {
+  background: var(--primary) !important;
+  color: #ffffff !important;
+  border-color: var(--primary-hover) !important;
+}
+
+/* Panel konfiguracji webhooka Google Sheets */
+#tab-sheet .webhook-config-box {
+  width: 100% !important;
+  box-sizing: border-box !important;
+  background: var(--bg-color) !important;
+  padding: 10px !important;
+  border-radius: 8px !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+#tab-sheet .webhook-config-box .flex-row {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  width: 100% !important;
+}
+
+#tab-sheet .webhook-config-box input {
+  flex: 1 1 200px !important;
+}
+
+/* Tabela i kontener ze skrolem poziomym – ochrona przed nakładaniem tekstu */
+#tab-sheet .table-wrapper {
+  width: 100% !important;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  display: block !important;
+  clear: both !important;
+  margin-top: 8px !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 8px !important;
+}
+
+#tab-sheet table.data-table {
+  width: 100% !important;
+  min-width: 850px !important; /* Wymusza przesuwanie tabeli na boki, chroniąc kolumny */
+  border-collapse: collapse !important;
+}
+
+#tab-sheet table.data-table th,
+#tab-sheet table.data-table td {
+  padding: 8px 10px !important;
+  white-space: nowrap !important; /* Zapobiega przypadkowemu zawijaniu i nachodzeniu wierszy */
+  font-size: 0.82rem !important;
+  text-align: left !important;
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+#tab-sheet table.data-table th {
+  background: var(--bg-color) !important;
+  font-weight: 700 !important;
+}
+
+/* Dopełnienie do małych ekranów mobilnych */
 @media (max-width: 600px) {
   .app-header {
     flex-direction: column;
     align-items: flex-start;
-    gap: 10px;
   }
 
   .header-actions {
@@ -817,109 +471,7 @@ body.dark-mode .app-header h1 {
     justify-content: space-between;
   }
 
-  .form-grid-2col {
-    grid-template-columns: 1fr;
+  #tab-sheet .btn-tab-toggle {
+    flex: 1 1 100% !important;
   }
-
-  .span-mobile-2 {
-    grid-column: span 1;
-  }
-
-  .flex-row {
-    flex-direction: column;
-  }
-
-  .form-actions {
-    flex-direction: column;
-  }
-
-  .sheet-toolbar {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .sheet-actions {
-    width: 100%;
-  }
-
-  .btn-excel, .btn-csv, .btn-import {
-    flex: 1;
-    text-align: center;
-  }
-}
-/* ==========================================================================
-   POPRAWKA RESPONSYWNOŚCI DLA ARKUSZ / HISTORIA (MOBILE BRAVE / ANDROID)
-   ========================================================================== */
-
-/* 1. Zapewnienie elastycznego układu dla nagłówków i paska narzędzi */
-#tab-sheet .sheet-toolbar,
-#tab-sheet .sheet-actions,
-#tab-sheet .gsheet-sync-box {
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: stretch !important;
-  width: 100% !important;
-  gap: 10px !important;
-  box-sizing: border-box !important;
-}
-
-/* 2. Przycisk przełączania widoków tabel (Przeglądy / Karmienie / Leczenie) */
-#tab-sheet .tab-toggle-bar,
-#tab-sheet div[style*="display: flex"] {
-  display: flex !important;
-  flex-wrap: wrap !important;
-  width: 100% !important;
-  gap: 8px !important;
-}
-
-#tab-sheet .btn-tab-toggle,
-#tab-sheet .tab-btn {
-  flex: 1 1 auto !important;
-  min-width: 120px !important;
-  text-align: center !important;
-  white-space: nowrap !important;
-}
-
-/* 3. Pasek filtrowania uli oraz czyszczenia */
-#tab-sheet .filter-bar {
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: stretch !important;
-  width: 100% !important;
-  gap: 8px !important;
-  margin-top: 10px !important;
-  margin-bottom: 10px !important;
-}
-
-#tab-sheet .filter-bar select,
-#tab-sheet .filter-bar button {
-  width: 100% !important;
-  max-width: none !important;
-}
-
-/* 4. Zapobieganie nachodzeniu tabel i wymuszenie poziomego przewijania */
-#tab-sheet .table-wrapper,
-#tab-sheet .table-responsive {
-  width: 100% !important;
-  overflow-x: auto !important;
-  -webkit-overflow-scrolling: touch !important;
-  display: block !important;
-  clear: both !important;
-  margin-top: 12px !important;
-  border-radius: 8px !important;
-}
-
-/* 5. Minimalna szerokość tabeli - chroni kolumny przed ściskaniem */
-#tab-sheet table.data-table,
-#tab-sheet table.sheet-table {
-  width: 100% !important;
-  min-width: 750px !important; /* Pozwala na płynne przewijanie tabeli w bok zamiast nakładania tekstu */
-  border-collapse: collapse !important;
-}
-
-#tab-sheet table th,
-#tab-sheet table td {
-  padding: 8px 10px !important;
-  white-space: nowrap !important; /* Zapobiega łamaniu i nakładaniu się tekstu w komórkach */
-  font-size: 0.85rem !important;
 }
