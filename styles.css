@@ -1,5 +1,5 @@
 /* ==========================================================================
-   PASIEKA WLKP - KOMPLETNY ARKUSZ STYLÓW (STYLES.CSS)
+   PASIEKA WLKP - PEŁNY ARKUSZ STYLÓW Z POPRAWKĄ RESPONSYWNOŚCI
    ========================================================================== */
 
 /* --- 1. ZMIENNE I MOTYWY --- */
@@ -38,6 +38,8 @@ body {
   padding: 12px;
   line-height: 1.5;
   transition: background-color 0.2s, color 0.2s;
+  max-width: 100vw;
+  overflow-x: hidden;
 }
 
 .hidden {
@@ -145,6 +147,7 @@ body {
 
 .tab-content {
   display: none;
+  width: 100%;
 }
 
 .tab-content.active {
@@ -257,6 +260,8 @@ body {
   border-radius: var(--radius);
   padding: 16px;
   box-shadow: var(--shadow);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .card-header {
@@ -340,96 +345,93 @@ body {
 }
 
 /* ==========================================================================
-   8. DEDYKOWANE POPRAWKI RESPONSYWNE DLA TABELI Z HISTORIĄ (BRAVE / ANDROID)
+   8. PEŁNE NAPRAWIENIE PODSTRONY: ARKUSZ / HISTORIA (#tab-sheet)
    ========================================================================== */
 
 #tab-sheet {
-  width: 100%;
+  width: 100% !important;
+  box-sizing: border-box !important;
 }
 
 #tab-sheet .card {
   display: flex !important;
   flex-direction: column !important;
-  gap: 12px !important;
+  gap: 14px !important;
   width: 100% !important;
   box-sizing: border-box !important;
+  overflow: hidden !important;
 }
 
-/* Górny pasek tytułu i działań w arkuszu */
-#tab-sheet .card-header {
+/* Górny pasek opcji i akcji */
+#tab-sheet .sheet-toolbar {
   display: flex !important;
   flex-direction: column !important;
   align-items: stretch !important;
-  gap: 10px !important;
+  gap: 12px !important;
   width: 100% !important;
 }
 
-#tab-sheet .card-header .flex-row {
+#tab-sheet .sheet-actions,
+#tab-sheet .header-actions {
   display: flex !important;
   flex-wrap: wrap !important;
   gap: 8px !important;
   width: 100% !important;
 }
 
-#tab-sheet .card-header select,
-#tab-sheet .card-header button {
+#tab-sheet .sheet-actions button,
+#tab-sheet .sheet-actions a,
+#tab-sheet .sheet-actions label {
+  flex: 1 1 auto !important;
+  min-width: 130px !important;
+  text-align: center !important;
+  justify-content: center !important;
+}
+
+/* Pasek przełączników tabel (Przeglądy / Karmienie / Leczenie) */
+#tab-sheet .tab-toggle-bar,
+#tab-sheet div[style*="display: flex"] {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  width: 100% !important;
+}
+
+#tab-sheet .btn-tab-toggle,
+#tab-sheet .tab-btn {
+  flex: 1 1 calc(33.33% - 8px) !important;
+  min-width: 100px !important;
+  padding: 10px 8px !important;
+  font-size: 0.85rem !important;
+  font-weight: 600 !important;
+  text-align: center !important;
+  box-sizing: border-box !important;
+}
+
+/* Pasek z filtrem uli i przyciskami */
+#tab-sheet .filter-bar {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 10px !important;
+  width: 100% !important;
+  background: var(--bg-color);
+  padding: 10px !important;
+  border-radius: 8px !important;
+  box-sizing: border-box !important;
+}
+
+#tab-sheet .filter-bar select,
+#tab-sheet .filter-bar button {
   flex: 1 1 auto !important;
   min-width: 140px !important;
 }
 
-/* Pasek przełączników tabel (Przeglądy / Karmienie / Leczenie) */
-#tab-sheet .tab-toggle-bar {
-  display: flex !important;
-  flex-wrap: wrap !important;
-  gap: 6px !important;
+/* Zapobieganie nachodzeniu tabel poprzez uaktywnienie poziomego suwaka */
+#tab-sheet .table-wrapper,
+#tab-sheet .table-responsive {
   width: 100% !important;
-  margin: 6px 0 !important;
-}
-
-#tab-sheet .btn-tab-toggle {
-  flex: 1 1 calc(33.33% - 6px) !important;
-  min-width: 90px !important;
-  padding: 8px 6px !important;
-  font-size: 0.8rem !important;
-  font-weight: 600 !important;
-  text-align: center !important;
-  border-radius: 8px !important;
-  border: 1px solid var(--border-color) !important;
-  background: var(--bg-color) !important;
-  color: var(--text-main) !important;
-  cursor: pointer !important;
-}
-
-#tab-sheet .btn-tab-toggle.active {
-  background: var(--primary) !important;
-  color: #ffffff !important;
-  border-color: var(--primary-hover) !important;
-}
-
-/* Panel konfiguracji webhooka Google Sheets */
-#tab-sheet .webhook-config-box {
-  width: 100% !important;
-  box-sizing: border-box !important;
-  background: var(--bg-color) !important;
-  padding: 10px !important;
-  border-radius: 8px !important;
-  border: 1px solid var(--border-color) !important;
-}
-
-#tab-sheet .webhook-config-box .flex-row {
-  display: flex !important;
-  flex-wrap: wrap !important;
-  gap: 8px !important;
-  width: 100% !important;
-}
-
-#tab-sheet .webhook-config-box input {
-  flex: 1 1 200px !important;
-}
-
-/* Tabela i kontener ze skrolem poziomym – ochrona przed nakładaniem tekstu */
-#tab-sheet .table-wrapper {
-  width: 100% !important;
+  max-width: 100% !important;
   overflow-x: auto !important;
   -webkit-overflow-scrolling: touch !important;
   display: block !important;
@@ -437,30 +439,41 @@ body {
   margin-top: 8px !important;
   border: 1px solid var(--border-color) !important;
   border-radius: 8px !important;
+  box-sizing: border-box !important;
 }
 
-#tab-sheet table.data-table {
+/* Sztywna minimalna szerokość samej tabeli zapobiega jej ściskaniu i nachodzeniu tekstu */
+#tab-sheet table.data-table,
+#tab-sheet table.sheet-table {
   width: 100% !important;
-  min-width: 850px !important; /* Wymusza przesuwanie tabeli na boki, chroniąc kolumny */
+  min-width: 850px !important;
   border-collapse: collapse !important;
+  table-layout: auto !important;
 }
 
 #tab-sheet table.data-table th,
-#tab-sheet table.data-table td {
-  padding: 8px 10px !important;
-  white-space: nowrap !important; /* Zapobiega przypadkowemu zawijaniu i nachodzeniu wierszy */
+#tab-sheet table.data-table td,
+#tab-sheet table.sheet-table th,
+#tab-sheet table.sheet-table td {
+  padding: 10px 8px !important;
+  white-space: nowrap !important;
   font-size: 0.82rem !important;
   text-align: left !important;
   border-bottom: 1px solid var(--border-color) !important;
 }
 
-#tab-sheet table.data-table th {
+#tab-sheet table.data-table th,
+#tab-sheet table.sheet-table th {
   background: var(--bg-color) !important;
   font-weight: 700 !important;
 }
 
-/* Dopełnienie do małych ekranów mobilnych */
+/* Ochrona widoku dla telefonów i ekranów mobilnych (Android / Brave) */
 @media (max-width: 600px) {
+  body {
+    padding: 8px;
+  }
+
   .app-header {
     flex-direction: column;
     align-items: flex-start;
@@ -471,7 +484,14 @@ body {
     justify-content: space-between;
   }
 
-  #tab-sheet .btn-tab-toggle {
+  #tab-sheet .btn-tab-toggle,
+  #tab-sheet .tab-btn {
+    flex: 1 1 100% !important;
+  }
+
+  #tab-sheet .sheet-actions button,
+  #tab-sheet .sheet-actions a,
+  #tab-sheet .sheet-actions label {
     flex: 1 1 100% !important;
   }
 }
