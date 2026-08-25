@@ -1,13 +1,13 @@
 /**
  * ZOPTYMALIZOWANA LOGIKA APLIKACJI ASYSTENT PASIEKA WLKP - 18 ULI (APLIK PASIEKA)
  * Kompletny moduł z obsługą kart: Przeglądy, Karmienie, Leczenie, natywną wysyłką mobilną (sendBeacon),
- * stasłą synchronizacją oraz usuwaniem rekordów bezpośrednio z Google Sheets.
+ * stałą synchronizacją oraz usuwaniem rekordów bezpośrednio z Google Sheets.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
   const TOTAL_HIVES = 18;
   
-  // STAŁA WARTOŚĆ DOMYŚLNA WEBHOOKA (Zabezpieczenie przed czyszczeniem localStorage na telefonie)
+  // STAŁA WARTOŚĆ DOMYŚLNA WEBHOOKA (Zabezpieczenie przed czyszczeniem localStorage)
   const DEFAULT_WEBHOOK = 'https://script.google.com/macros/s/AKfycbyQQL4WLtFXlgo0nuvtGSzWxvoxfqbA0sK0zf_Hh7bflcwsNxZ9UM73leN_kEHWc0yNtw/exec';
 
   const KEYS = {
@@ -551,10 +551,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function deleteRecord(type, id) {
-    // 1. Wysyłka sygnału usunięcia do Google Sheets
     deleteFromGoogleSheets(type, id);
 
-    // 2. Usunięcie wpisu z pamięci przeglądarki
     if (type === 'inspections') { 
       inspections = inspections.filter(x => x.id !== id); 
       Store.set(KEYS.INSPECTIONS, inspections); 
@@ -688,7 +686,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (n !== null) { hiveQueens[id] = n.trim(); Store.set(KEYS.QUEENS, hiveQueens); renderHivesGrid(); renderSheetTable(); }
   }
 
-  // === INTEGRACJA GOOGLE SHEETS (HYBRYDA MOBILNA SENDBEACON + FETCH) ===
+  // === INTEGRACJA GOOGLE SHEETS ===
   function saveLocalRecordState(type) {
     if (type === 'inspection') Store.set(KEYS.INSPECTIONS, inspections);
     if (type === 'feeding') Store.set(KEYS.FEEDINGS, feedings);
@@ -706,7 +704,6 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     const payloadStr = JSON.stringify(payloadObj);
 
-    // 1. Natywny interfejs sendBeacon dla sieci mobilnych (omija bloki 302/CORS)
     if (navigator.sendBeacon) {
       const blob = new Blob([payloadStr], { type: 'text/plain;charset=UTF-8' });
       const sent = navigator.sendBeacon(url, blob);
@@ -717,7 +714,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // 2. Fallback Fetch API
     fetch(url, {
       method: 'POST',
       mode: 'no-cors',
