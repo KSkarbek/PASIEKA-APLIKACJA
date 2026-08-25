@@ -2,483 +2,413 @@
 <html lang="pl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="description" content="Ewidencja pasieki WLKP - 18 uli. System monitorowania przeglądów, karmienia i leczenia.">
-  
-  <title>Asystent Pasieki WLKP - 18 Uli</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pasieka WLKP - Asystent Pasieki</title>
 
   <!-- PWA & Mobile Settings -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#f59e0b">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="apple-touch-icon" href="icon-192x192.png">
 
-  <!-- Resource Hints -->
-  <link rel="preload" href="styles.css" as="style">
   <link rel="stylesheet" href="styles.css">
-  
-  <!-- Zewnętrzne zależności -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
-  <div class="app-container">
 
-    <!-- NAGŁÓWEK -->
-    <header class="app-header">
-      <div class="logo-area">
-        <span class="bee-icon" aria-hidden="true">🐝</span>
-        <div>
-          <h1>Pasieka WLKP</h1>
-          <p class="subtitle">Ewidencja 18 uli • 3 Pasieki • Plik: APLIK PASIEKA</p>
-        </div>
+  <!-- NAGŁÓWEK -->
+  <header class="app-header">
+    <div class="logo-area">
+      <span class="bee-icon">🐝</span>
+      <div>
+        <h1>Pasieka WLKP</h1>
+        <p class="subtitle">Ewidencja 18 uli • 3 Pasieki • Plik: APLIK PASIEKA</p>
       </div>
-      <div class="header-actions">
-        <a href="https://docs.google.com/spreadsheets/u/0/" target="_blank" rel="noopener noreferrer" class="btn-gsheet" title="Otwórz Arkusz Google w nowej karcie">
-          📊 Arkusz Google (APLIK PASIEKA)
-        </a>
-        <button id="btn-theme-toggle" class="btn-icon" aria-label="Przełącz motyw" title="Zmień tryb jasny/ciemny">☀️</button>
-        <button id="btn-voice-master" class="btn-voice-master" aria-label="Sterowanie głosem" title="Włącz sterowanie i czytanie głosem">
-          <span class="mic-icon" aria-hidden="true">🎙️</span> <span class="voice-label">Głos: Wyłączony</span>
-        </button>
-      </div>
-    </header>
-
-    <!-- STATUS ASYSTENTA GŁOSOWEGO -->
-    <div id="voice-status-bar" class="voice-status-bar hidden" aria-live="polite">
-      <span class="pulse-dot" aria-hidden="true"></span>
-      <span id="voice-status-text">Słucham... Powiedz komendę lub dyktuj działania</span>
-      <button id="btn-stop-voice" class="btn-small" aria-label="Wyłącz asystenta">Wyłącz</button>
     </div>
+    <div class="header-actions">
+      <a href="https://docs.google.com/spreadsheets/u/0/" target="_blank" class="btn-gsheet" title="Otwórz Arkusz Google w nowej karcie">
+        📊 Arkusz Google (APLIK PASIEKA)
+      </a>
+      <button id="btn-theme-toggle" class="btn-icon" title="Zmień tryb jasny/ciemny">☀️</button>
+      <button id="btn-voice-master" class="btn-voice-master" title="Włącz sterowanie i czytanie głosem">
+        <span class="mic-icon">🎙️</span> <span class="voice-label">Głos: Wyłączony</span>
+      </button>
+    </div>
+  </header>
 
-    <!-- NAWIGACJA ZAKŁADEK -->
-    <nav class="tab-nav" aria-label="Główna nawigacja">
-      <button class="tab-btn active" data-tab="tab-dom" aria-controls="tab-dom">🏡 DOM (1-6)</button>
-      <button class="tab-btn" data-tab="tab-zbior" aria-controls="tab-zbior">🌾 ZBIÓR (7-12)</button>
-      <button class="tab-btn" data-tab="tab-las" aria-controls="tab-las">🌲 LAS (13-18)</button>
-      <button class="tab-btn" data-tab="tab-feeding" aria-controls="tab-feeding">🍯 Karmienie</button>
-      <button class="tab-btn" data-tab="tab-treatment" aria-controls="tab-treatment">💉 Leczenie</button>
-      <button class="tab-btn" data-tab="tab-sheet" aria-controls="tab-sheet">📊 Arkusz / Historia</button>
-    </nav>
+  <!-- STATUS ASYSTENTA GŁOSOWEGO -->
+  <div id="voice-status-bar" class="voice-status-bar hidden">
+    <span class="pulse-dot"></span>
+    <span id="voice-status-text">Słucham... Powiedz komendę lub dyktuj działania</span>
+    <button id="btn-stop-voice" class="btn-small">Wyłącz</button>
+  </div>
 
-    <!-- ZAKŁADKA 1: DOM (ULE 1-6) -->
-    <section id="tab-dom" class="tab-content active" aria-labelledby="title-dom">
-      <div class="section-title title-dom">
-        <h2 id="title-dom">🏡 Pasieka DOM</h2>
-        <span class="badge-count group-dom">Ule 1 – 6</span>
+  <!-- NAWIGACJA ZAKŁADEK -->
+  <nav class="tab-nav">
+    <button class="tab-btn active" data-tab="tab-dom">🏡 DOM (1-6)</button>
+    <button class="tab-btn" data-tab="tab-zbior">🌾 ZBIÓR (7-12)</button>
+    <button class="tab-btn" data-tab="tab-las">🌲 LAS (13-18)</button>
+    <button class="tab-btn" data-tab="tab-feeding">🍯 Karmienie</button>
+    <button class="tab-btn" data-tab="tab-treatment">💉 Leczenie</button>
+    <button class="tab-btn" data-tab="tab-sheet">📊 Arkusz / Historia</button>
+  </nav>
+
+  <!-- ZAKŁADKA 1: DOM -->
+  <section id="tab-dom" class="tab-content active">
+    <div class="section-title title-dom">
+      <h2>🏡 Pasieka DOM</h2>
+      <span class="badge-count group-dom">Ule 1 – 6</span>
+    </div>
+    <div id="hives-grid-dom" class="hives-grid hives-grid-dom"></div>
+  </section>
+
+  <!-- ZAKŁADKA 2: ZBIÓR -->
+  <section id="tab-zbior" class="tab-content">
+    <div class="section-title title-zbior">
+      <h2>🌾 Pasieka ZBIÓR</h2>
+      <span class="badge-count group-zbior">Ule 7 – 12</span>
+    </div>
+    <div id="hives-grid-zbior" class="hives-grid hives-grid-zbior"></div>
+  </section>
+
+  <!-- ZAKŁADKA 3: LAS -->
+  <section id="tab-las" class="tab-content">
+    <div class="section-title title-las">
+      <h2>🌲 Pasieka LAS</h2>
+      <span class="badge-count group-las">Ule 13 – 18</span>
+    </div>
+    <div id="hives-grid-las" class="hives-grid hives-grid-las"></div>
+  </section>
+
+  <!-- ZAKŁADKA 4: FORMULARZ PRZEGLĄDU -->
+  <section id="tab-inspection" class="tab-content">
+    <div class="card form-card">
+      <div class="card-header">
+        <h2 id="form-hive-title">Przegląd Ula № 1</h2>
+        <span class="hive-type-badge">WLKP</span>
       </div>
-      <div id="hives-grid-dom" class="hives-grid hives-grid-dom"></div>
-    </section>
 
-    <!-- ZAKŁADKA 2: ZBIÓR (ULE 7-12) -->
-    <section id="tab-zbior" class="tab-content" aria-labelledby="title-zbior">
-      <div class="section-title title-zbior">
-        <h2 id="title-zbior">🌾 Pasieka ZBIÓR</h2>
-        <span class="badge-count group-zbior">Ule 7 – 12</span>
-      </div>
-      <div id="hives-grid-zbior" class="hives-grid hives-grid-zbior"></div>
-    </section>
-
-    <!-- ZAKŁADKA 3: LAS (ULE 13-18) -->
-    <section id="tab-las" class="tab-content" aria-labelledby="title-las">
-      <div class="section-title title-las">
-        <h2 id="title-las">🌲 Pasieka LAS</h2>
-        <span class="badge-count group-las">Ule 13 – 18</span>
-      </div>
-      <div id="hives-grid-las" class="hives-grid hives-grid-las"></div>
-    </section>
-
-    <!-- ZAKŁADKA 4: FORMULARZ PRZEGLĄDU -->
-    <section id="tab-inspection" class="tab-content">
-      <div class="card form-card">
-        <div class="card-header">
-          <h2 id="form-hive-title">Przegląd Ula № 1</h2>
-          <span class="hive-type-badge">WLKP</span>
+      <form id="inspection-form">
+        <div class="form-row flex-row">
+          <div class="form-group flex-1">
+            <label for="select-hive">Wybierz Ul:</label>
+            <select id="select-hive" class="input-control select-lg" required></select>
+          </div>
+          <div class="form-group flex-1">
+            <label for="input-date">Data i Godzina:</label>
+            <input type="datetime-local" id="input-date" class="input-control" required>
+          </div>
         </div>
 
-        <form id="inspection-form">
-          <div class="form-row flex-row">
-            <div class="form-group flex-1">
-              <label for="select-hive">Wybierz Ul:</label>
-              <select id="select-hive" class="input-control select-lg" required></select>
+        <div class="form-grid-3 margin-top-md">
+          <div class="form-group">
+            <label class="group-label">Matka:</label>
+            <div class="radio-group">
+              <label><input type="radio" name="matka" value="TAK" id="matka-tak" checked> 👑 TAK</label>
+              <label><input type="radio" name="matka" value="NIE" id="matka-nie"> ❌ NIE</label>
             </div>
-            <div class="form-group flex-1">
-              <label for="input-date">Data przeglądu:</label>
-              <input type="datetime-local" id="input-date" class="input-control" required>
-            </div>
-          </div>
-
-          <div class="form-grid-2col">
-            <fieldset class="form-group box-option border-none p-0">
-              <legend class="group-label">Matka w ulu:</legend>
-              <div class="toggle-switch-group">
-                <input type="radio" name="matka" id="matka-tak" value="TAK" checked>
-                <label for="matka-tak" class="toggle-btn pos">TAK 👑</label>
-                <input type="radio" name="matka" id="matka-nie" value="NIE">
-                <label for="matka-nie" class="toggle-btn neg">NIE ❌</label>
-              </div>
-            </fieldset>
-
-            <fieldset class="form-group box-option border-none p-0">
-              <legend class="group-label">Jaja (świeży czerw):</legend>
-              <div class="toggle-switch-group">
-                <input type="radio" name="jaja" id="jaja-tak" value="TAK" checked>
-                <label for="jaja-tak" class="toggle-btn pos">TAK 🥚</label>
-                <input type="radio" name="jaja" id="jaja-nie" value="NIE">
-                <label for="jaja-nie" class="toggle-btn neg">NIE ❌</label>
-              </div>
-            </fieldset>
-
-            <div class="form-group box-option">
-              <label for="ramki-czerwiu" class="group-label">Czerw (ile ramek WLKP):</label>
-              <div class="stepper-control" id="ramki-stepper-wrap">
-                <button type="button" class="btn-stepper" id="btn-ramki-minus" aria-label="Zmniejsz ilość ramek">-</button>
-                <input type="number" id="ramki-czerwiu" class="input-stepper" value="4" min="0" max="30">
-                <button type="button" class="btn-stepper" id="btn-ramki-plus" aria-label="Zwiększ ilość ramek">+</button>
-              </div>
-              <div style="margin-top: 10px; display: flex; justify-content: center;">
-                <label style="cursor: pointer; font-size: 0.85rem; font-weight: 600; color: #4b5563; display: flex; align-items: center; gap: 6px; padding: 6px 12px; background: #f3f4f6; border-radius: 8px; border: 1px solid #d1d5db; user-select: none;">
-                  <input type="checkbox" id="cb-ramki-niewiem" style="transform: scale(1.3);">
-                  NIE WIEM / Brak danych 🤷
-                </label>
-              </div>
-            </div>
-
-            <fieldset class="form-group box-option border-none p-0">
-              <legend class="group-label">Pokarm:</legend>
-              <div class="toggle-switch-group">
-                <input type="radio" name="pokarm" id="pokarm-ok" value="OK" checked>
-                <label for="pokarm-ok" class="toggle-btn pos">OK 🍯</label>
-                <input type="radio" name="pokarm" id="pokarm-brak" value="BRAK">
-                <label for="pokarm-brak" class="toggle-btn neg">BRAK ⚠️</label>
-              </div>
-            </fieldset>
-
-            <fieldset class="form-group box-option border-none p-0">
-              <legend class="group-label">Półkorpus (nadstawki WLKP):</legend>
-              <div class="toggle-switch-group-4">
-                <input type="radio" name="polkorpus" id="polkorpus-0" value="0" checked>
-                <label for="polkorpus-0" class="toggle-btn-4 lvl-2">0 (brak)</label>
-                <input type="radio" name="polkorpus" id="polkorpus-1" value="1">
-                <label for="polkorpus-1" class="toggle-btn-4 lvl-3">1 📦</label>
-                <input type="radio" name="polkorpus" id="polkorpus-2" value="2">
-                <label for="polkorpus-2" class="toggle-btn-4 lvl-3">2 📦📦</label>
-                <input type="radio" name="polkorpus" id="polkorpus-3" value="3">
-                <label for="polkorpus-3" class="toggle-btn-4 lvl-4">3 📦📦📦</label>
-              </div>
-            </fieldset>
-
-            <fieldset class="form-group box-option span-mobile-2 border-none p-0" style="grid-column: span 2;">
-              <legend class="group-label">Stan rodziny (RODZINA):</legend>
-              <div class="toggle-switch-group-4">
-                <input type="radio" name="rodzina" id="rodzina-bs" value="Bardzo Silna">
-                <label for="rodzina-bs" class="toggle-btn-4 lvl-4">💪 Bardzo Silna</label>
-                <input type="radio" name="rodzina" id="rodzina-s" value="Silna" checked>
-                <label for="rodzina-s" class="toggle-btn-4 lvl-3">👍 Silna</label>
-                <input type="radio" name="rodzina" id="rodzina-sr" value="Średnia">
-                <label for="rodzina-sr" class="toggle-btn-4 lvl-2">👌 Średnia</label>
-                <input type="radio" name="rodzina" id="rodzina-sl" value="Słaba">
-                <label for="rodzina-sl" class="toggle-btn-4 lvl-1">⚠️ Słaba</label>
-                <input type="radio" name="rodzina" id="rodzina-brak" value="BRAK">
-                <label for="rodzina-brak" class="toggle-btn-4 lvl-0">❌ BRAK</label>
-              </div>
-            </fieldset>
           </div>
 
           <div class="form-group">
-            <div class="label-with-btn">
-              <label for="input-dzialania">Działania wykonane / Uwagi:</label>
-              <button type="button" id="btn-dictate-dzialania" class="btn-dictate" aria-label="Podyktuj głosem działania">🎙️ Podyktuj głosem</button>
+            <label class="group-label">Jaja (Jednodniowe):</label>
+            <div class="radio-group">
+              <label><input type="radio" name="jaja" value="TAK" id="jaja-tak" checked> 🥚 TAK</label>
+              <label><input type="radio" name="jaja" value="NIE" id="jaja-nie"> ❌ NIE</label>
             </div>
-            <textarea id="input-dzialania" class="input-control textarea-lg" rows="3" placeholder="Opisz wykonane prace..."></textarea>
           </div>
 
           <div class="form-group">
-            <div class="label-with-btn">
-              <label for="input-przyszle-dzialania">Przyszłe działania (planowane prace):</label>
-              <button type="button" id="btn-dictate-przyszle" class="btn-dictate" aria-label="Podyktuj głosem plan">🎙️ Podyktuj głosem</button>
+            <label class="group-label">Pokarm:</label>
+            <div class="radio-group">
+              <label><input type="radio" name="pokarm" value="OK" id="pokarm-ok" checked> 🍯 OK</label>
+              <label><input type="radio" name="pokarm" value="BRAK" id="pokarm-brak"> ⚠️ BRAK</label>
             </div>
-            <textarea id="input-przyszle-dzialania" class="input-control textarea-lg" rows="3" placeholder="Planowane prace na kolejny przegląd..."></textarea>
-          </div>
-
-          <div class="form-actions">
-            <button type="submit" class="btn-primary btn-xl">💾 Zapisz Przegląd</button>
-            <button type="button" id="btn-read-hive" class="btn-secondary">🔊 Przeczytaj stan ula</button>
-          </div>
-        </form>
-      </div>
-    </section>
-
-    <!-- ZAKŁADKA 5: KARMIENIE -->
-    <section id="tab-feeding" class="tab-content">
-      <div class="card form-card">
-        <div class="card-header" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); color: #92400e; display:flex; justify-content:space-between; align-items:center;">
-          <h2 id="form-feeding-title">🍯 Karmienie Ula № 1</h2>
-          <div style="display:flex; align-items:center; gap:8px;">
-            <button type="button" id="btn-feeding-hive-history" class="btn-small" style="background:#ffffff; color:#b45309; border-color:#fde68a; font-weight:700; padding:6px 10px;" title="Pokaż historię karmienia tego ula">📜 Historia tego ula</button>
-            <span class="hive-type-badge" style="background:#b45309; color:#ffffff;">Karmienie</span>
           </div>
         </div>
 
-        <form id="feeding-form">
-          <div class="form-row flex-row">
-            <div class="form-group flex-1">
-              <label for="select-feeding-hive">Wybierz Ul:</label>
-              <select id="select-feeding-hive" class="input-control select-lg" required></select>
-            </div>
-            <div class="form-group flex-1">
-              <label for="input-feeding-date">Data karmienia:</label>
-              <input type="datetime-local" id="input-feeding-date" class="input-control" required>
+        <div class="form-row margin-top-md flex-row align-center">
+          <div class="form-group flex-1">
+            <label class="group-label">Ramki Czerwiu:</label>
+            <div class="stepper-control" id="ramki-stepper-wrap">
+              <button type="button" id="btn-ramki-minus" class="btn-stepper">-</button>
+              <input type="number" id="ramki-czerwiu" value="4" min="0" max="30" class="input-control text-center">
+              <button type="button" id="btn-ramki-plus" class="btn-stepper">+</button>
             </div>
           </div>
-
-          <div class="form-grid-2col">
-            <div class="form-group box-option span-mobile-2">
-              <label for="input-feeding-kg" class="group-label">Ilość cukru (kg):</label>
-              <div class="stepper-control">
-                <button type="button" id="btn-kg-minus" class="btn-stepper" aria-label="Zmniejsz ilość cukru">-</button>
-                <input type="number" id="input-feeding-kg" class="input-control input-number" value="3" min="0.5" max="50" step="0.5">
-                <button type="button" id="btn-kg-plus" class="btn-stepper" aria-label="Zwiększ ilość cukru">+</button>
-                <span style="font-weight: bold; font-size: 1.1rem; align-self: center; margin-left: 8px;">kg</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="form-group margin-top-md">
-            <label for="input-feeding-notes" class="group-label">Uwagi / Rodzaj syropu / Ciasto:</label>
-            <div class="textarea-voice-wrapper">
-              <textarea id="input-feeding-notes" class="input-control" rows="3" placeholder="np. Syrop 3:2 z pokrzywą, podano ciasto kandy 1kg"></textarea>
-              <button type="button" id="btn-dictate-feeding" class="btn-dictate-floating" title="Podyktuj głosem uwagi" aria-label="Podyktuj uwagi">🎙️ Podyktuj</button>
-            </div>
-          </div>
-
-          <div class="form-actions">
-            <button type="submit" class="btn-primary btn-xl" style="background:#d97706; border-color:#b45309;">💾 Zapisz Karmienie</button>
-          </div>
-        </form>
-      </div>
-
-      <div class="card sheet-card" style="margin-top: 16px;">
-        <div class="sheet-toolbar" style="margin-bottom: 12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-          <div>
-            <h3 style="color:#b45309; margin:0;">🍯 Historia Karmienia Wszystkich Uli</h3>
-            <p class="text-muted" id="feeding-summary-text" style="margin:2px 0 0 0; font-size:0.85rem;">Łącznie podano: 0 kg cukru</p>
-          </div>
-          <div class="filter-bar" style="margin:0; padding:4px 8px; background:transparent;">
-            <label for="filter-tab-feeding-select" style="font-size:0.85rem; font-weight:600;">Filtruj ul:</label>
-            <select id="filter-tab-feeding-select" class="input-control select-sm"></select>
-          </div>
-        </div>
-
-        <div class="table-responsive">
-          <table class="sheet-table">
-            <thead>
-              <tr>
-                <th>Data i Czas</th>
-                <th>Ul №</th>
-                <th>Nazwa Ula</th>
-                <th>Ilość Cukru (kg)</th>
-                <th>Uwagi / Rodzaj Syropu</th>
-                <th>Akcje</th>
-              </tr>
-            </thead>
-            <tbody id="tab-feeding-tbody"></tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-
-    <!-- ZAKŁADKA 6: LECZENIE -->
-    <section id="tab-treatment" class="tab-content">
-      <div class="card form-card">
-        <div class="card-header" style="background: linear-gradient(135deg, #fee2e2 0%, #fca5a5 100%); color: #991b1b; display:flex; justify-content:space-between; align-items:center;">
-          <h2 id="form-treatment-title">💉 Leczenie Ula № 1</h2>
-          <span class="hive-type-badge" style="background:#991b1b; color:#ffffff;">Leczenie</span>
-        </div>
-
-        <form id="treatment-form">
-          <div class="form-row flex-row">
-            <div class="form-group flex-1">
-              <label for="select-treatment-hive">Wybierz Ul:</label>
-              <select id="select-treatment-hive" class="input-control select-lg" required></select>
-            </div>
-            <div class="form-group flex-1">
-              <label for="input-treatment-date">Data leczenia:</label>
-              <input type="datetime-local" id="input-treatment-date" class="input-control" required>
-            </div>
-          </div>
-
-          <div class="form-group margin-top-md">
-            <label for="input-treatment-preparat" class="group-label">Preparat / Metoda:</label>
-            <input type="text" id="input-treatment-preparat" class="input-control" placeholder="np. Kwas szczawiowy, ApiWarrow, Paski" required>
-          </div>
-
-          <div class="form-group margin-top-md">
-            <label for="input-treatment-notes" class="group-label">Dawka / Uwagi / Osyp Varroa:</label>
-            <textarea id="input-treatment-notes" class="input-control" rows="3" placeholder="np. Odparowanie 1.5g/ul, temp. 8°C, osyp ok. 50 szt."></textarea>
-          </div>
-
-          <div class="form-actions">
-            <button type="submit" class="btn-primary btn-xl" style="background:#dc2626; border-color:#991b1b;">💾 Zapisz Leczenie</button>
-          </div>
-        </form>
-      </div>
-
-      <div class="card sheet-card" style="margin-top: 16px;">
-        <div class="sheet-toolbar" style="margin-bottom: 12px; display:flex; justify-content:space-between; align-items:center;">
-          <h3 style="color:#991b1b; margin:0;">💉 Historia Leczenia Wszystkich Uli</h3>
-        </div>
-        <div class="table-responsive">
-          <table class="sheet-table">
-            <thead>
-              <tr>
-                <th>Data i Czas</th>
-                <th>Ul №</th>
-                <th>Nazwa Ula</th>
-                <th>Preparat / Metoda</th>
-                <th>Dawka / Uwagi</th>
-                <th>Akcje</th>
-              </tr>
-            </thead>
-            <tbody id="tab-treatment-tbody"></tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-
-    <!-- ZAKŁADKA 7: ARKUSZ / HISTORIA / EXPORT -->
-    <section id="tab-sheet" class="tab-content">
-      <div class="card sheet-card">
-        <div class="sheet-toolbar">
-          <div>
-            <h2>Arkusz Kalkulacyjny Pasieki</h2>
-            <p class="text-muted">Synchro z plikiem Google Sheets: APLIK PASIEKA</p>
-          </div>
-          <div class="sheet-actions">
-            <a href="https://docs.google.com/spreadsheets/u/0/" target="_blank" rel="noopener noreferrer" class="btn-gsheet" style="padding: 10px 14px; text-decoration:none;">
-              🟢 Otwórz plik APLIK PASIEKA
-            </a>
-            <button id="btn-sync-now" class="btn-primary" style="padding: 10px 14px; font-size: 0.9rem;">
-              🔄 Synchronizuj z Google Sheets
-            </button>
-            <button id="btn-export-excel" class="btn-excel">📥 Pobierz plik Excel (.xlsx)</button>
-            <button id="btn-export-csv" class="btn-csv">📄 Pobierz CSV</button>
-            <label class="btn-import">
-              📂 Importuj z Excela/CSV
-              <input type="file" id="file-import" accept=".xlsx, .xls, .csv" aria-label="Wybierz plik do importu">
+          <div class="form-group padding-top-lg">
+            <label class="checkbox-label">
+              <input type="checkbox" id="cb-ramki-niewiem"> NIE WIEM 🤷
             </label>
           </div>
         </div>
 
-        <div class="gsheet-sync-box" style="background: #f0fdf4; border: 1px solid #86efac; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-            <div>
-              <strong style="color: #166534; font-size: 0.95rem;">📊 Automatyczny Zapis w Google Sheets:</strong>
-              <div style="font-size: 0.85rem; color: #15803d; margin-top: 2px;">
-                Target: <strong>APLIK PASIEKA</strong> (Przeglądy, Karmienie, Leczenie)
-              </div>
-            </div>
-            <button id="btn-show-gsheet-script" class="btn-small" style="background:#ffffff; color:#15803d; border-color:#86efac; font-weight:700;">
-              ⚙️ Instrukcja połączenia
-            </button>
-          </div>
-          <div id="gsheet-script-details" class="hidden" style="margin-top: 12px; padding-top: 12px; border-top: 1px dashed #86efac; font-size: 0.85rem; color: #166534;">
-            <p style="margin-bottom: 6px;">Użyj kodu Apps Script udostępnionego w instrukcji połączenia.</p>
-            <div style="display:flex; gap:8px; align-items:center; margin-top:6px;">
-              <input type="text" id="input-gsheet-webhook" class="input-control" placeholder="Wklej URL z Apps Script (np. https://script.google.com/macros/s/.../exec)" style="font-size:0.85rem;" aria-label="Adres URL webhooka">
-              <button id="btn-save-webhook" class="btn-excel" style="white-space:nowrap;">💾 Zapisz Link</button>
-            </div>
+        <div class="form-group margin-top-md">
+          <label class="group-label">Siła Rodziny:</label>
+          <div class="radio-group">
+            <label><input type="radio" name="rodzina" value="Bardzo Silna" id="rodzina-bs"> Bardzo Silna 💪</label>
+            <label><input type="radio" name="rodzina" value="Średnia" id="rodzina-sr" checked> Średnia 🙂</label>
+            <label><input type="radio" name="rodzina" value="Słaba" id="rodzina-sl"> Słaba 📉</label>
+            <label><input type="radio" name="rodzina" value="BRAK" id="rodzina-brak"> BRAK ❌</label>
           </div>
         </div>
 
-        <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
-          <button id="btn-view-inspections" class="tab-btn active" style="flex: initial; padding: 8px 16px;">📝 Przeglądy Uli</button>
-          <button id="btn-view-feedings" class="tab-btn" style="flex: initial; padding: 8px 16px;">🍯 Historia Karmienia</button>
-          <button id="btn-view-treatments" class="tab-btn" style="flex: initial; padding: 8px 16px;">💉 Historia Leczenia</button>
+        <div class="form-group margin-top-md">
+          <label class="group-label">Półkorpus (Nadstawki):</label>
+          <div class="radio-group">
+            <label><input type="radio" name="polkorpus" value="0" id="polkorpus-0" checked> 0</label>
+            <label><input type="radio" name="polkorpus" value="1" id="polkorpus-1"> 1 📦</label>
+            <label><input type="radio" name="polkorpus" value="2" id="polkorpus-2"> 2 📦📦</label>
+            <label><input type="radio" name="polkorpus" value="3" id="polkorpus-3"> 3 📦📦📦</label>
+          </div>
         </div>
 
-        <div class="filter-bar">
-          <label for="filter-hive-select">Filtruj według ula:</label>
-          <select id="filter-hive-select" class="input-control select-sm"></select>
-          <button id="btn-clear-all" class="btn-danger-outline">🗑️ Wyczyść historię</button>
+        <div class="form-group margin-top-md">
+          <div class="label-with-btn">
+            <label for="input-dzialania">Wykonane Działania:</label>
+            <button type="button" id="btn-dictate-dzialania" class="btn-small">🎙️ Dyktuj</button>
+          </div>
+          <textarea id="input-dzialania" class="input-control" rows="2" placeholder="np. Dodano węzę, wycięto trutowy"></textarea>
         </div>
 
-        <!-- TABELA PRZEGLĄDÓW -->
-        <div id="wrapper-inspections-table" class="table-responsive">
-          <table id="sheet-table" class="sheet-table">
-            <thead>
-              <tr>
-                <th>Data i Czas</th>
-                <th>Ul №</th>
-                <th>Nazwa Ula</th>
-                <th>Rodzina</th>
-                <th>Matka Status</th>
-                <th>Matka Opis</th>
-                <th>Jaja</th>
-                <th>Czerw (Ramki)</th>
-                <th>Pokarm</th>
-                <th>Półkorpus</th>
-                <th>Działania Wykonane</th>
-                <th>Przyszłe Działania</th>
-                <th>Akcje</th>
-              </tr>
-            </thead>
-            <tbody id="sheet-tbody"></tbody>
-          </table>
+        <div class="form-group margin-top-md">
+          <div class="label-with-btn">
+            <label for="input-przyszle-dzialania">Przyszłe Działania / Plan:</label>
+            <button type="button" id="btn-dictate-przyszle" class="btn-small">🎙️ Dyktuj</button>
+          </div>
+          <textarea id="input-przyszle-dzialania" class="input-control" rows="2" placeholder="np. Skontrolować mateczniki za 7 dni"></textarea>
         </div>
 
-        <!-- TABELA KARMIENIA -->
-        <div id="wrapper-feedings-table" class="table-responsive hidden">
-          <table id="feedings-table" class="sheet-table">
-            <thead>
-              <tr>
-                <th>Data i Czas</th>
-                <th>Ul №</th>
-                <th>Nazwa Ula</th>
-                <th>Ilość Cukru (kg)</th>
-                <th>Uwagi / Rodzaj Syropu</th>
-                <th>Akcje</th>
-              </tr>
-            </thead>
-            <tbody id="feedings-tbody"></tbody>
-          </table>
+        <div class="form-actions">
+          <button type="submit" class="btn-primary btn-xl">💾 Zapisz Przegląd</button>
         </div>
+      </form>
+    </div>
+  </section>
 
-        <!-- TABELA LECZENIA -->
-        <div id="wrapper-treatments-table" class="table-responsive hidden">
-          <table id="treatments-table" class="sheet-table">
-            <thead>
-              <tr>
-                <th>Data i Czas</th>
-                <th>Ul №</th>
-                <th>Nazwa Ula</th>
-                <th>Preparat / Metoda</th>
-                <th>Dawka / Uwagi</th>
-                <th>Akcje</th>
-              </tr>
-            </thead>
-            <tbody id="treatments-tbody"></tbody>
-          </table>
-        </div>
-
+  <!-- ZAKŁADKA 5: FORMULARZ KARMIENIA -->
+  <section id="tab-feeding" class="tab-content">
+    <div class="card form-card">
+      <div class="card-header" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); color: #92400e;">
+        <h2 id="form-feeding-title">🍯 Karmienie Ula № 1</h2>
+        <span class="hive-type-badge" style="background:#d97706; color:#ffffff;">Karmienie</span>
       </div>
-    </section>
 
-    <!-- MODAL HISTORII I EDYCJI DLA KONKRETNEGO ULA -->
-    <div id="hive-history-modal" class="modal-overlay hidden" aria-modal="true" role="dialog" aria-labelledby="modal-hive-title">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h3 id="modal-hive-title">📜 Historia Ula</h3>
-          <button id="btn-close-modal" class="btn-icon" aria-label="Zamknij okno">✖️</button>
+      <form id="feeding-form">
+        <div class="form-row flex-row">
+          <div class="form-group flex-1">
+            <label for="select-feeding-hive">Wybierz Ul:</label>
+            <select id="select-feeding-hive" class="input-control select-lg" required></select>
+          </div>
+          <div class="form-group flex-1">
+            <label for="input-feeding-date">Data i Godzina:</label>
+            <input type="datetime-local" id="input-feeding-date" class="input-control" required>
+          </div>
         </div>
-        <div class="modal-body">
-          <div id="modal-history-content"></div>
+
+        <div class="form-group margin-top-md">
+          <label class="group-label">Ilość Cukru / Syropu (kg):</label>
+          <div class="stepper-control">
+            <button type="button" id="btn-kg-minus" class="btn-stepper">-</button>
+            <input type="number" id="input-feeding-kg" value="3.0" step="0.5" min="0.5" max="50" class="input-control text-center">
+            <button type="button" id="btn-kg-plus" class="btn-stepper">+</button>
+          </div>
         </div>
-      </div>
+
+        <div class="form-group margin-top-md">
+          <label for="input-feeding-notes">Uwagi / Rodzaj pokarmu:</label>
+          <textarea id="input-feeding-notes" class="input-control" rows="2" placeholder="np. Syrop 3:2, Ciasto Apifonda"></textarea>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn-primary btn-xl" style="background:#d97706; border-color:#b45309;">💾 Zapisz Karmienie</button>
+        </div>
+      </form>
     </div>
 
+    <!-- PODSUMOWANIE KARMIENIA -->
+    <div class="card margin-top-lg">
+      <div class="card-header flex-between">
+        <h3>📊 Podsumowanie Karmień</h3>
+        <select id="filter-tab-feeding-select" class="input-control select-sm"></select>
+      </div>
+      <p id="feeding-summary-text" style="padding: 10px; font-weight: 600; color: #b45309;"></p>
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Ul</th>
+              <th>Nazwa Ula</th>
+              <th>Ilość Cukru</th>
+              <th>Uwagi</th>
+              <th>Akcje</th>
+            </tr>
+          </thead>
+          <tbody id="tab-feeding-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ZAKŁADKA 6: FORMULARZ LECZENIA -->
+  <section id="tab-treatment" class="tab-content">
+    <div class="card form-card">
+      <div class="card-header" style="background: linear-gradient(135deg, #fee2e2 0%, #fca5a5 100%); color: #991b1b;">
+        <h2 id="form-treatment-title">💉 Leczenie Ula № 1</h2>
+        <span class="hive-type-badge" style="background:#991b1b; color:#ffffff;">Leczenie</span>
+      </div>
+
+      <form id="treatment-form">
+        <div class="form-row flex-row">
+          <div class="form-group flex-1">
+            <label for="select-treatment-hive">Wybierz Ul:</label>
+            <select id="select-treatment-hive" class="input-control select-lg" required></select>
+          </div>
+          <div class="form-group flex-1">
+            <label for="input-treatment-date">Data i Godzina:</label>
+            <input type="datetime-local" id="input-treatment-date" class="input-control" required>
+          </div>
+        </div>
+
+        <div class="form-group margin-top-md">
+          <label for="input-treatment-preparat" class="group-label">Preparat / Metoda:</label>
+          <input type="text" id="input-treatment-preparat" class="input-control" placeholder="np. Kwas szczawiowy (odparowanie), ApiWarroo, Paski" required>
+        </div>
+
+        <div class="form-group margin-top-md">
+          <label for="input-treatment-notes" class="group-label">Dawka / Uwagi / Osyp Varroa:</label>
+          <textarea id="input-treatment-notes" class="input-control" rows="3" placeholder="np. Dawka 1.5g/ul, osyp po 24h: 15 roztoczy"></textarea>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn-primary btn-xl" style="background:#dc2626; border-color:#991b1b;">💾 Zapisz Leczenie</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- TABELA LECZENIA -->
+    <div class="card margin-top-lg">
+      <div class="card-header">
+        <h3>📋 Rejestr Leczenia</h3>
+      </div>
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Ul</th>
+              <th>Nazwa Ula</th>
+              <th>Preparat</th>
+              <th>Uwagi</th>
+              <th>Akcje</th>
+            </tr>
+          </thead>
+          <tbody id="tab-treatment-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ZAKŁADKA 7: HISTORIA I ZBIORCZE TABELE -->
+  <section id="tab-sheet" class="tab-content">
+    <div class="card">
+      <div class="card-header flex-between">
+        <h2>📊 Zbiorczy Arkusz Danych</h2>
+        <div class="flex-row gap-sm">
+          <select id="filter-hive-select" class="input-control select-sm"></select>
+          <button id="btn-sync-now" class="btn-primary btn-sm">🔄 Synchronizuj z Google Sheets</button>
+        </div>
+      </div>
+
+      <div class="tab-toggle-bar margin-top-md">
+        <button id="btn-view-inspections" class="btn-tab-toggle active">📋 Przeglądy</button>
+        <button id="btn-view-feedings" class="btn-tab-toggle">🍯 Karmienie</button>
+        <button id="btn-view-treatments" class="btn-tab-toggle">💉 Leczenie</button>
+      </div>
+
+      <!-- KONFIGURACJA WEBHOOKA -->
+      <div class="webhook-config-box margin-top-md">
+        <button id="btn-show-gsheet-script" class="btn-small">⚙️ Ustawienia połączenia z Google Sheets</button>
+        <div id="gsheet-script-details" class="hidden margin-top-sm">
+          <label for="input-gsheet-webhook">URL Webhooka Google Apps Script:</label>
+          <div class="flex-row gap-sm margin-top-xs">
+            <input type="url" id="input-gsheet-webhook" class="input-control flex-1" placeholder="https://script.google.com/macros/s/.../exec">
+            <button id="btn-save-webhook" class="btn-primary btn-sm">Zapisz URL</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- TABELA PRZEGLĄDÓW -->
+      <div id="wrapper-inspections-table" class="table-wrapper margin-top-md">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Data i Czas</th>
+              <th>Ul</th>
+              <th>Nazwa Ula</th>
+              <th>Rodzina</th>
+              <th>Matka</th>
+              <th>Info Matka</th>
+              <th>Jaja</th>
+              <th>Czerw</th>
+              <th>Pokarm</th>
+              <th>Nadstawki</th>
+              <th>Działania</th>
+              <th>Plan</th>
+              <th>Akcje</th>
+            </tr>
+          </thead>
+          <tbody id="sheet-tbody"></tbody>
+        </table>
+      </div>
+
+      <!-- TABELA KARMIENIA -->
+      <div id="wrapper-feedings-table" class="table-wrapper margin-top-md hidden">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Ul</th>
+              <th>Nazwa Ula</th>
+              <th>Ilość Cukru</th>
+              <th>Uwagi</th>
+              <th>Akcje</th>
+            </tr>
+          </thead>
+          <tbody id="feedings-tbody"></tbody>
+        </table>
+      </div>
+
+      <!-- TABELA LECZENIA -->
+      <div id="wrapper-treatments-table" class="table-wrapper margin-top-md hidden">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Ul</th>
+              <th>Nazwa Ula</th>
+              <th>Preparat</th>
+              <th>Uwagi</th>
+              <th>Akcje</th>
+            </tr>
+          </thead>
+          <tbody id="treatments-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- MODAL HISTORII ULA -->
+  <div id="hive-history-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header flex-between">
+        <h3 id="modal-hive-title">Historia Ula</h3>
+        <button id="btn-close-modal" class="btn-close">&times;</button>
+      </div>
+      <div id="modal-history-content" class="modal-body margin-top-md"></div>
+    </div>
   </div>
 
-  <script src="app.js" defer></script>
+  <script src="app.js"></script>
 </body>
 </html>
