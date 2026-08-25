@@ -847,3 +847,79 @@ body.dark-mode .app-header h1 {
     text-align: center;
   }
 }
+/* ==========================================================================
+   POPRAWKA RESPONSYWNOŚCI DLA ARKUSZ / HISTORIA (MOBILE BRAVE / ANDROID)
+   ========================================================================== */
+
+/* 1. Zapewnienie elastycznego układu dla nagłówków i paska narzędzi */
+#tab-sheet .sheet-toolbar,
+#tab-sheet .sheet-actions,
+#tab-sheet .gsheet-sync-box {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  width: 100% !important;
+  gap: 10px !important;
+  box-sizing: border-box !important;
+}
+
+/* 2. Przycisk przełączania widoków tabel (Przeglądy / Karmienie / Leczenie) */
+#tab-sheet .tab-toggle-bar,
+#tab-sheet div[style*="display: flex"] {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  width: 100% !important;
+  gap: 8px !important;
+}
+
+#tab-sheet .btn-tab-toggle,
+#tab-sheet .tab-btn {
+  flex: 1 1 auto !important;
+  min-width: 120px !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+}
+
+/* 3. Pasek filtrowania uli oraz czyszczenia */
+#tab-sheet .filter-bar {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  width: 100% !important;
+  gap: 8px !important;
+  margin-top: 10px !important;
+  margin-bottom: 10px !important;
+}
+
+#tab-sheet .filter-bar select,
+#tab-sheet .filter-bar button {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+/* 4. Zapobieganie nachodzeniu tabel i wymuszenie poziomego przewijania */
+#tab-sheet .table-wrapper,
+#tab-sheet .table-responsive {
+  width: 100% !important;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  display: block !important;
+  clear: both !important;
+  margin-top: 12px !important;
+  border-radius: 8px !important;
+}
+
+/* 5. Minimalna szerokość tabeli - chroni kolumny przed ściskaniem */
+#tab-sheet table.data-table,
+#tab-sheet table.sheet-table {
+  width: 100% !important;
+  min-width: 750px !important; /* Pozwala na płynne przewijanie tabeli w bok zamiast nakładania tekstu */
+  border-collapse: collapse !important;
+}
+
+#tab-sheet table th,
+#tab-sheet table td {
+  padding: 8px 10px !important;
+  white-space: nowrap !important; /* Zapobiega łamaniu i nakładaniu się tekstu w komórkach */
+  font-size: 0.85rem !important;
+}
