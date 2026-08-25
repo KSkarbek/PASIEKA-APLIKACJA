@@ -728,20 +728,35 @@ document.addEventListener('DOMContentLoaded', () => {
     .catch(console.error);
   }
 
-  function fetchFromGoogleSheets() {
+   function fetchFromGoogleSheets() {
     const url = getWebhookUrl();
     if (!url) return Promise.reject();
     return fetch(url).then(r => r.json()).then(remote => {
       let added = 0;
       if (Array.isArray(remote)) {
         remote.forEach(rm => {
-          if (!inspections.some(lc => lc.hiveNum === rm.hiveNum && new Date(lc.timestamp).getTime() === new Date(rm.timestamp).getTime())) {
-            inspections.push(rm); added++;
+          // KONWERSJA I WALIDACJA NUMERU ULA (1 - 18)
+          const hNum = parseInt(rm.hiveNum, 10);
+          
+          // Jeśli wpis nie posiada poprawnego numeru ula (1-18) lub nie ma identyfikatora - ignorujemy go
+          if (isNaN(hNum) || hNum < 1 || hNum > TOTAL_HIVES || !rm.id) {
+            return;
+          }
+
+          rm.hiveNum = hNum; // Przypisujemy czystą liczbę
+
+          // Sprawdzamy czy wpis już istnieje w lokalnej pamięci
+          if (!inspections.some(lc => lc.id === rm.id || (lc.hiveNum === rm.hiveNum && new Date(lc.timestamp).getTime() === new Date(rm.timestamp).getTime()))) {
+            inspections.push(rm); 
+            added++;
           }
         });
+
         if (added > 0) {
           inspections.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-          Store.set(KEYS.INSPECTIONS, inspections); renderSheetTable(); renderHivesGrid();
+          Store.set(KEYS.INSPECTIONS, inspections); 
+          renderSheetTable(); 
+          renderHivesGrid();
         }
       }
       return added;
