@@ -1,6 +1,7 @@
 /**
  * ZOPTYMALIZOWANA LOGIKA APLIKACJI ASYSTENT PASIEKA WLKP - 18 ULI (APLIK PASIEKA)
- * Kompletny moduł z obsługą kart: Przeglądy, Karmienie, Leczenie, natywną wysyłką mobilną (sendBeacon) i stałą synchronizacją Google Sheets.
+ * Kompletny moduł z obsługą kart: Przeglądy, Karmienie, Leczenie, natywną wysyłką mobilną (sendBeacon),
+ * stasłą synchronizacją oraz usuwaniem rekordów bezpośrednio z Google Sheets.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -154,7 +155,7 @@ document.addEventListener('DOMContentLoaded', () => {
       DOM.btnSyncNow.disabled = true;
       DOM.btnSyncNow.textContent = '⏳ Synchronizacja...';
 
-      // Wysyłka niezsynchronizowanych
+      // Wysyłka niezsynchronizowanych wpisów
       inspections.filter(r => !r._synced).forEach(rec => sendToGoogleSheets(rec, 'inspection'));
       feedings.filter(r => !r._synced).forEach(rec => sendToGoogleSheets(rec, 'feeding'));
       treatments.filter(r => !r._synced).forEach(rec => sendToGoogleSheets(rec, 'treatment'));
@@ -524,11 +525,53 @@ document.addEventListener('DOMContentLoaded', () => {
     </td>
   `;
 
-  // === EDYCJA I USUWANIE ===
+  // === OBSŁUGA USUWANIA Z GOOGLE SHEETS I LOKALNEJ PAMIĘCI ===
+  function deleteFromGoogleSheets(type, id) {
+    const url = getWebhookUrl();
+    if (!url) return;
+
+    const payloadStr = JSON.stringify({
+      action: 'delete',
+      type: type,
+      id: id
+    });
+
+    if (navigator.sendBeacon) {
+      const blob = new Blob([payloadStr], { type: 'text/plain;charset=UTF-8' });
+      navigator.sendBeacon(url, blob);
+    } else {
+      fetch(url, {
+        method: 'POST',
+        mode: 'no-cors',
+        cache: 'no-cache',
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+        body: payloadStr
+      }).catch(console.error);
+    }
+  }
+
   function deleteRecord(type, id) {
-    if (type === 'inspections') { inspections = inspections.filter(x => x.id !== id); Store.set(KEYS.INSPECTIONS, inspections); renderSheetTable(); }
-    if (type === 'feedings') { feedings = feedings.filter(x => x.id !== id); Store.set(KEYS.FEEDINGS, feedings); renderTabFeedingTable(); renderFeedingsTable(); }
-    if (type === 'treatments') { treatments = treatments.filter(x => x.id !== id); Store.set(KEYS.TREATMENTS, treatments); renderTabTreatmentTable(); renderTreatmentsTable(); }
+    // 1. Wysyłka sygnału usunięcia do Google Sheets
+    deleteFromGoogleSheets(type, id);
+
+    // 2. Usunięcie wpisu z pamięci przeglądarki
+    if (type === 'inspections') { 
+      inspections = inspections.filter(x => x.id !== id); 
+      Store.set(KEYS.INSPECTIONS, inspections); 
+      renderSheetTable(); 
+    }
+    if (type === 'feedings') { 
+      feedings = feedings.filter(x => x.id !== id); 
+      Store.set(KEYS.FEEDINGS, feedings); 
+      renderTabFeedingTable(); 
+      renderFeedingsTable(); 
+    }
+    if (type === 'treatments') { 
+      treatments = treatments.filter(x => x.id !== id); 
+      Store.set(KEYS.TREATMENTS, treatments); 
+      renderTabTreatmentTable(); 
+      renderTreatmentsTable(); 
+    }
     renderHivesGrid();
   }
 
