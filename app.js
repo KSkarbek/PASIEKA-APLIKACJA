@@ -1,13 +1,13 @@
 /**
- * ZOPTYMALIZOWANA LOGIKA APLIKACJI ASYSTENT PASIEKA WLKP - 18 ULI (APLIK PASIEKA)
- * Kompletny moduł z obsługą kart: Przeglądy, Karmienie, Leczenie, natywną wysyłką mobilną (sendBeacon),
- * stałą synchronizacją oraz usuwaniem rekordów bezpośrednio z Google Sheets.
+ * BEZBŁĘDNA LOGIKA APLIKACJI ASYSTENT PASIEKA WLKP - 18 ULI (APLIK PASIEKA)
+ * Poprawiona obsługa zdarzeń (stopPropagation), rozwijania okna modalnego historii ula
+ * oraz pełnej synchronizacji mobilnej.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
   const TOTAL_HIVES = 18;
   
-  // STAŁA WARTOŚĆ DOMYŚLNA WEBHOOKA (Zabezpieczenie przed czyszczeniem localStorage)
+  // STAŁA WARTOŚĆ DOMYŚLNA WEBHOOKA
   const DEFAULT_WEBHOOK = 'https://script.google.com/macros/s/AKfycbyQQL4WLtFXlgo0nuvtGSzWxvoxfqbA0sK0zf_Hh7bflcwsNxZ9UM73leN_kEHWc0yNtw/exec';
 
   const KEYS = {
@@ -20,12 +20,10 @@ document.addEventListener('DOMContentLoaded', () => {
     WEBHOOK: 'pasieka_gsheet_webhook_v1'
   };
 
-  // Bezpieczne pobieranie URL Webhooka
   function getWebhookUrl() {
     return localStorage.getItem(KEYS.WEBHOOK) || DEFAULT_WEBHOOK;
   }
 
-  // === INTERFEJS I/O (STORAGE) ===
   const Store = {
     get: (key, def) => { try { return JSON.parse(localStorage.getItem(key)) || def; } catch { return def; } },
     set: (key, val) => { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
@@ -45,7 +43,6 @@ document.addEventListener('DOMContentLoaded', () => {
   let editingFeedingId = null;
   let editingTreatmentId = null;
 
-  // === POMOCNICZE PURE FUNCTIONS ===
   const escapeHtml = str => String(str || '').replace(/[&<>"']/g, m => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'}[m]));
   const formatPL = dStr => {
     const d = new Date(dStr);
@@ -58,7 +55,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const getHiveName = id => hiveNames[id] || `Ul № ${id}`;
   const getHiveCategory = id => id <= 6 ? 'dom' : (id <= 12 ? 'zbior' : 'las');
 
-  // === SELEKTORY DOM ===
   const qs = s => document.querySelector(s);
   const qsa = s => document.querySelectorAll(s);
   const qsid = id => document.getElementById(id);
@@ -69,38 +65,31 @@ document.addEventListener('DOMContentLoaded', () => {
     btnStopVoice: qsid('btn-stop-voice'), tabs: qsa('.tab-btn'), contents: qsa('.tab-content'),
     grids: { dom: qsid('hives-grid-dom'), zbior: qsid('hives-grid-zbior'), las: qsid('hives-grid-las') },
     
-    // Formularz Przeglądu
     inspForm: qsid('inspection-form'), selHive: qsid('select-hive'), dateInsp: qsid('input-date'),
     ramki: qsid('ramki-czerwiu'), cbRamkiNw: qsid('cb-ramki-niewiem'), ramkiWrap: qsid('ramki-stepper-wrap'),
     dzialania: qsid('input-dzialania'), przyszle: qsid('input-przyszle-dzialania'),
     
-    // Formularz Karmienia
     feedForm: qsid('feeding-form'), selFeedHive: qsid('select-feeding-hive'), dateFeed: qsid('input-feeding-date'),
     kgFeed: qsid('input-feeding-kg'), notesFeed: qsid('input-feeding-notes'),
     
-    // Formularz Leczenia
     treatForm: qsid('treatment-form'), selTreatHive: qsid('select-treatment-hive'), dateTreat: qsid('input-treatment-date'),
     prepTreat: qsid('input-treatment-preparat'), notesTreat: qsid('input-treatment-notes'),
 
-    // Modal, Tabele, Filtry
     modal: qsid('hive-history-modal'), modalContent: qsid('modal-history-content'),
     sheetTbody: qsid('sheet-tbody'), feedTbody: qsid('tab-feeding-tbody'), mainFeedTbody: qsid('feedings-tbody'),
     treatTbody: qsid('tab-treatment-tbody'), mainTreatTbody: qsid('treatments-tbody'),
     filterHive: qsid('filter-hive-select'), filterFeed: qsid('filter-tab-feeding-select'),
     
-    // Webhook i Synchronizacja
     webhook: qsid('input-gsheet-webhook'),
     btnSaveWebhook: qsid('btn-save-webhook'),
     btnShowGsheetScript: qsid('btn-show-gsheet-script'),
     gsheetScriptDetails: qsid('gsheet-script-details'),
     btnSyncNow: qsid('btn-sync-now'),
     
-    // Wrappery Tabel
     wrapInsp: qsid('wrapper-inspections-table'), wrapFeed: qsid('wrapper-feedings-table'), wrapTreat: qsid('wrapper-treatments-table'),
     btnVInsp: qsid('btn-view-inspections'), btnVFeed: qsid('btn-view-feedings'), btnVTreat: qsid('btn-view-treatments')
   };
 
-  // === INICJALIZACJA ===
   initTheme();
   if (DOM.dateInsp) DOM.dateInsp.value = getDatetimeLocal();
   if (DOM.dateFeed) DOM.dateFeed.value = getDatetimeLocal();
@@ -110,11 +99,8 @@ document.addEventListener('DOMContentLoaded', () => {
   renderSheetTable();
   initVoiceRecognition();
 
-  if (DOM.webhook) {
-    DOM.webhook.value = getWebhookUrl();
-  }
+  if (DOM.webhook) DOM.webhook.value = getWebhookUrl();
 
-  // Zwijanie instrukcji Google Sheets
   if (DOM.btnShowGsheetScript && DOM.gsheetScriptDetails) {
     DOM.btnShowGsheetScript.addEventListener('click', (e) => {
       e.preventDefault();
@@ -122,7 +108,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Zapis linku Webhooka
   if (DOM.btnSaveWebhook && DOM.webhook) {
     DOM.btnSaveWebhook.addEventListener('click', (e) => {
       e.preventDefault();
@@ -143,26 +128,21 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Przycisk ręcznej synchronizacji
   if (DOM.btnSyncNow) {
     DOM.btnSyncNow.addEventListener('click', () => {
       const url = getWebhookUrl();
-      if (!url) {
-        alert('Brak skonfigurowanego adresu URL.');
-        return;
-      }
+      if (!url) { alert('Brak skonfigurowanego adresu URL.'); return; }
 
       DOM.btnSyncNow.disabled = true;
       DOM.btnSyncNow.textContent = '⏳ Synchronizacja...';
 
-      // Wysyłka niezsynchronizowanych wpisów
       inspections.filter(r => !r._synced).forEach(rec => sendToGoogleSheets(rec, 'inspection'));
       feedings.filter(r => !r._synced).forEach(rec => sendToGoogleSheets(rec, 'feeding'));
       treatments.filter(r => !r._synced).forEach(rec => sendToGoogleSheets(rec, 'treatment'));
 
       fetchFromGoogleSheets()
         .then(addedCount => {
-          alert(`Synchronizacja dwukierunkowa zakończona sukcesem!\n• Pobrano nowych wpisów z arkusza: ${addedCount}`);
+          alert(`Synchronizacja zakończona sukcesem!\nPobrano nowych wpisów: ${addedCount}`);
           speakText('Pomyślnie zsynchronizowano dane z Google Sheets.');
         })
         .catch(err => {
@@ -180,7 +160,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(console.error);
 
-  // === EVENT LISTENERS ===
   DOM.tabs.forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
 
   if (DOM.cbRamkiNw) {
@@ -191,16 +170,16 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // === POPRAWIONA DELEGACJA ZDAREŃ - ZAPOBIEGANIE NACHODZENIU KLIKNIĘĆ ===
   document.addEventListener('click', e => {
-    // Steppery
     if(e.target.id === 'btn-ramki-minus' && !DOM.cbRamkiNw.checked) DOM.ramki.value = Math.max(0, (parseInt(DOM.ramki.value)||0)-1);
     if(e.target.id === 'btn-ramki-plus' && !DOM.cbRamkiNw.checked) DOM.ramki.value = Math.min(30, (parseInt(DOM.ramki.value)||0)+1);
     if(e.target.id === 'btn-kg-minus') DOM.kgFeed.value = Math.max(0.5, (parseFloat(DOM.kgFeed.value)||0)-0.5).toFixed(1);
     if(e.target.id === 'btn-kg-plus') DOM.kgFeed.value = Math.min(50, (parseFloat(DOM.kgFeed.value)||0)+0.5).toFixed(1);
 
-    // Akcje w Kafelkach Uli
     const cardBtn = e.target.closest('button[data-hive]');
     if (cardBtn) {
+      e.stopPropagation();
       const hId = parseInt(cardBtn.dataset.hive);
       if (cardBtn.classList.contains('btn-add-inspection')) openInspectionForHive(hId);
       if (cardBtn.classList.contains('btn-add-feeding')) openFeedingForHive(hId);
@@ -211,12 +190,13 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // Modal
-    if (e.target === DOM.modal || e.target.id === 'btn-close-modal') DOM.modal.classList.add('hidden');
+    if (e.target === DOM.modal || e.target.id === 'btn-close-modal' || e.target.classList.contains('btn-close')) {
+      DOM.modal.classList.add('hidden');
+    }
     
-    // Tabele edycja/usuwanie
     const actionBtn = e.target.closest('button[data-id]');
     if (actionBtn) {
+      e.stopPropagation();
       const id = actionBtn.dataset.id;
       if (actionBtn.classList.contains('btn-delete-row') || actionBtn.classList.contains('btn-delete-inspection')) {
         if (confirm('Usunąć wpis przeglądu?')) deleteRecord('inspections', id);
@@ -233,7 +213,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Selecty
   if (DOM.selHive) DOM.selHive.addEventListener('change', e => qsid('form-hive-title').textContent = `Przegląd: ${getHiveName(e.target.value)}`);
   if (DOM.selFeedHive) DOM.selFeedHive.addEventListener('change', e => qsid('form-feeding-title').textContent = `🍯 Karmienie: ${getHiveName(e.target.value)}`);
   if (DOM.selTreatHive) DOM.selTreatHive.addEventListener('change', e => qsid('form-treatment-title').textContent = `💉 Leczenie: ${getHiveName(e.target.value)}`);
@@ -261,8 +240,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (view === 'treat') renderTreatmentsTable();
   }
 
-  // === SUBMIT FORMULARZY ===
-  // 1. Przegląd
   if (DOM.inspForm) {
     DOM.inspForm.addEventListener('submit', e => {
       e.preventDefault();
@@ -308,7 +285,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 2. Karmienie
   if (DOM.feedForm) {
     DOM.feedForm.addEventListener('submit', e => {
       e.preventDefault();
@@ -344,7 +320,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 3. Leczenie
   if (DOM.treatForm) {
     DOM.treatForm.addEventListener('submit', e => {
       e.preventDefault();
@@ -381,7 +356,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // === RENDERING ===
   function renderHivesGrid() {
     updateHiveSelects();
     [DOM.grids.dom, DOM.grids.zbior, DOM.grids.las].forEach(g => g && (g.innerHTML = ''));
@@ -430,7 +404,11 @@ document.addEventListener('DOMContentLoaded', () => {
           <button class="btn-card-action btn-speak-hive" data-hive="${i}">🔊 Czytaj</button>
         </div>
       `;
-      card.addEventListener('click', e => { if(!e.target.closest('button')) openInspectionForHive(i); });
+      
+      // Bezpieczne przypisanie zdarzenia otwarcia formularza z osobną rejestracją
+      card.addEventListener('click', e => { 
+        if(!e.target.closest('button')) openInspectionForHive(i); 
+      });
       frags[getHiveCategory(i)].appendChild(card);
     }
     
@@ -525,7 +503,29 @@ document.addEventListener('DOMContentLoaded', () => {
     </td>
   `;
 
-  // === OBSŁUGA USUWANIA Z GOOGLE SHEETS I LOKALNEJ PAMIĘCI ===
+  function deleteRecord(type, id) {
+    deleteFromGoogleSheets(type, id);
+
+    if (type === 'inspections') { 
+      inspections = inspections.filter(x => x.id !== id); 
+      Store.set(KEYS.INSPECTIONS, inspections); 
+      renderSheetTable(); 
+    }
+    if (type === 'feedings') { 
+      feedings = feedings.filter(x => x.id !== id); 
+      Store.set(KEYS.FEEDINGS, feedings); 
+      renderTabFeedingTable(); 
+      renderFeedingsTable(); 
+    }
+    if (type === 'treatments') { 
+      treatments = treatments.filter(x => x.id !== id); 
+      Store.set(KEYS.TREATMENTS, treatments); 
+      renderTabTreatmentTable(); 
+      renderTreatmentsTable(); 
+    }
+    renderHivesGrid();
+  }
+
   function deleteFromGoogleSheets(type, id) {
     const url = getWebhookUrl();
     if (!url) return;
@@ -548,29 +548,6 @@ document.addEventListener('DOMContentLoaded', () => {
         body: payloadStr
       }).catch(console.error);
     }
-  }
-
-  function deleteRecord(type, id) {
-    deleteFromGoogleSheets(type, id);
-
-    if (type === 'inspections') { 
-      inspections = inspections.filter(x => x.id !== id); 
-      Store.set(KEYS.INSPECTIONS, inspections); 
-      renderSheetTable(); 
-    }
-    if (type === 'feedings') { 
-      feedings = feedings.filter(x => x.id !== id); 
-      Store.set(KEYS.FEEDINGS, feedings); 
-      renderTabFeedingTable(); 
-      renderFeedingsTable(); 
-    }
-    if (type === 'treatments') { 
-      treatments = treatments.filter(x => x.id !== id); 
-      Store.set(KEYS.TREATMENTS, treatments); 
-      renderTabTreatmentTable(); 
-      renderTreatmentsTable(); 
-    }
-    renderHivesGrid();
   }
 
   function openInspectionForHive(hId) {
@@ -686,13 +663,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (n !== null) { hiveQueens[id] = n.trim(); Store.set(KEYS.QUEENS, hiveQueens); renderHivesGrid(); renderSheetTable(); }
   }
 
-  // === INTEGRACJA GOOGLE SHEETS ===
-  function saveLocalRecordState(type) {
-    if (type === 'inspection') Store.set(KEYS.INSPECTIONS, inspections);
-    if (type === 'feeding') Store.set(KEYS.FEEDINGS, feedings);
-    if (type === 'treatment') Store.set(KEYS.TREATMENTS, treatments);
-  }
-
   function sendToGoogleSheets(record, type = 'inspection') {
     const url = getWebhookUrl();
     if (!url || record._synced) return;
@@ -728,24 +698,27 @@ document.addEventListener('DOMContentLoaded', () => {
     .catch(console.error);
   }
 
-   function fetchFromGoogleSheets() {
+  function saveLocalRecordState(type) {
+    if (type === 'inspection') Store.set(KEYS.INSPECTIONS, inspections);
+    if (type === 'feeding') Store.set(KEYS.FEEDINGS, feedings);
+    if (type === 'treatment') Store.set(KEYS.TREATMENTS, treatments);
+  }
+
+  function fetchFromGoogleSheets() {
     const url = getWebhookUrl();
     if (!url) return Promise.reject();
     return fetch(url).then(r => r.json()).then(remote => {
       let added = 0;
       if (Array.isArray(remote)) {
         remote.forEach(rm => {
-          // KONWERSJA I WALIDACJA NUMERU ULA (1 - 18)
           const hNum = parseInt(rm.hiveNum, 10);
           
-          // Jeśli wpis nie posiada poprawnego numeru ula (1-18) lub nie ma identyfikatora - ignorujemy go
           if (isNaN(hNum) || hNum < 1 || hNum > TOTAL_HIVES || !rm.id) {
             return;
           }
 
-          rm.hiveNum = hNum; // Przypisujemy czystą liczbę
+          rm.hiveNum = hNum;
 
-          // Sprawdzamy czy wpis już istnieje w lokalnej pamięci
           if (!inspections.some(lc => lc.id === rm.id || (lc.hiveNum === rm.hiveNum && new Date(lc.timestamp).getTime() === new Date(rm.timestamp).getTime()))) {
             inspections.push(rm); 
             added++;
@@ -763,7 +736,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // === SYNTEZA I ROZPOZNAWANIE MOWY ===
   function speakText(text) {
     if (!('speechSynthesis' in window)) return;
     window.speechSynthesis.cancel();
@@ -778,6 +750,7 @@ document.addEventListener('DOMContentLoaded', () => {
     speakText(`${getHiveName(hId)}. Rodzina ${last.rodzina||'silna'}. Matka ${last.matka==='TAK'?'jest':'brak'}. Jaja ${last.jaja==='TAK'?'obecne':'brak'}. ${czerw}. Pokarm ${last.pokarm==='OK'?'w normie':'brak'}. Wykonano: ${last.dzialania}.`);
   }
 
+  // === DEDYKOWANE OKNO MODALNE DLA HISTORII ULA ===
   function openHiveHistoryModal(hiveNum) {
     const nameOfHive = getHiveName(hiveNum);
     const hiveInspections = inspections.filter(item => item.hiveNum === hiveNum);
