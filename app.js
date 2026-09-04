@@ -1,13 +1,13 @@
 /**
  * ZOPTYMALIZOWANA LOGIKA APLIKACJI ASYSTENT PASIEKA WLKP - 18 ULI (APLIK PASIEKA)
- * Kompletny moduł z obsługą kart: Przeglądy, Karmienie, Leczenie, natywną wysyłką mobilną (sendBeacon),
- * stałym webhookiem oraz dwukierunkowym usuwaniem rekordów bezpośrednio w Google Sheets.
+ * Kompletny moduł z obsługą kart, natywną wysyłką mobilną (sendBeacon), stałą
+ * synchronizacją oraz ścisłą walidacją odrzucającą uszkodzone/puste wiersze z arkusza.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
   const TOTAL_HIVES = 18;
   
-  // STAŁA WARTOŚĆ DOMYŚLNA WEBHOOKA (Zabezpieczenie przed czyszczeniem localStorage w Brave/telefonie)
+  // STAŁA WARTOŚĆ DOMYŚLNA WEBHOOKA (Zabezpieczenie przed czyszczeniem localStorage)
   const DEFAULT_WEBHOOK = 'https://script.google.com/macros/s/AKfycbyQQL4WLtFXlgo0nuvtGSzWxvoxfqbA0sK0zf_Hh7bflcwsNxZ9UM73leN_kEHWc0yNtw/exec';
 
   const KEYS = {
@@ -20,7 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
     WEBHOOK: 'pasieka_gsheet_webhook_v1'
   };
 
-  // Bezpieczne pobieranie URL Webhooka (z fallbackiem do stałej)
+  // Bezpieczne pobieranie URL Webhooka
   function getWebhookUrl() {
     return localStorage.getItem(KEYS.WEBHOOK) || DEFAULT_WEBHOOK;
   }
@@ -49,6 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const escapeHtml = str => String(str || '').replace(/[&<>"']/g, m => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'}[m]));
   const formatPL = dStr => {
     const d = new Date(dStr);
+    if (isNaN(d.getTime())) return 'Brak daty';
     return `${d.toLocaleDateString('pl-PL')} ${d.toLocaleTimeString('pl-PL', {hour:'2-digit', minute:'2-digit'})}`;
   };
   const getDatetimeLocal = (d = new Date()) => {
@@ -69,14 +70,16 @@ document.addEventListener('DOMContentLoaded', () => {
     btnStopVoice: qsid('btn-stop-voice'), tabs: qsa('.tab-btn'), contents: qsa('.tab-content'),
     grids: { dom: qsid('hives-grid-dom'), zbior: qsid('hives-grid-zbior'), las: qsid('hives-grid-las') },
     
-    // Formularze
+    // Formularz Przeglądu
     inspForm: qsid('inspection-form'), selHive: qsid('select-hive'), dateInsp: qsid('input-date'),
     ramki: qsid('ramki-czerwiu'), cbRamkiNw: qsid('cb-ramki-niewiem'), ramkiWrap: qsid('ramki-stepper-wrap'),
     dzialania: qsid('input-dzialania'), przyszle: qsid('input-przyszle-dzialania'),
     
+    // Formularz Karmienia
     feedForm: qsid('feeding-form'), selFeedHive: qsid('select-feeding-hive'), dateFeed: qsid('input-feeding-date'),
     kgFeed: qsid('input-feeding-kg'), notesFeed: qsid('input-feeding-notes'),
     
+    // Formularz Leczenia
     treatForm: qsid('treatment-form'), selTreatHive: qsid('select-treatment-hive'), dateTreat: qsid('input-treatment-date'),
     prepTreat: qsid('input-treatment-preparat'), notesTreat: qsid('input-treatment-notes'),
 
@@ -112,6 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
     DOM.webhook.value = getWebhookUrl();
   }
 
+  // Zwijanie instrukcji Google Sheets
   if (DOM.btnShowGsheetScript && DOM.gsheetScriptDetails) {
     DOM.btnShowGsheetScript.addEventListener('click', (e) => {
       e.preventDefault();
@@ -119,6 +123,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Zapis linku Webhooka
   if (DOM.btnSaveWebhook && DOM.webhook) {
     DOM.btnSaveWebhook.addEventListener('click', (e) => {
       e.preventDefault();
@@ -139,6 +144,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Przycisk ręcznej synchronizacji
   if (DOM.btnSyncNow) {
     DOM.btnSyncNow.addEventListener('click', () => {
       const url = getWebhookUrl();
@@ -150,6 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
       DOM.btnSyncNow.disabled = true;
       DOM.btnSyncNow.textContent = '⏳ Synchronizacja...';
 
+      // Wysyłka niezsynchronizowanych wpisów
       inspections.filter(r => !r._synced).forEach(rec => sendToGoogleSheets(rec, 'inspection'));
       feedings.filter(r => !r._synced).forEach(rec => sendToGoogleSheets(rec, 'feeding'));
       treatments.filter(r => !r._synced).forEach(rec => sendToGoogleSheets(rec, 'treatment'));
@@ -186,11 +193,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   document.addEventListener('click', e => {
+    // Steppery
     if(e.target.id === 'btn-ramki-minus' && !DOM.cbRamkiNw.checked) DOM.ramki.value = Math.max(0, (parseInt(DOM.ramki.value)||0)-1);
     if(e.target.id === 'btn-ramki-plus' && !DOM.cbRamkiNw.checked) DOM.ramki.value = Math.min(30, (parseInt(DOM.ramki.value)||0)+1);
     if(e.target.id === 'btn-kg-minus') DOM.kgFeed.value = Math.max(0.5, (parseFloat(DOM.kgFeed.value)||0)-0.5).toFixed(1);
     if(e.target.id === 'btn-kg-plus') DOM.kgFeed.value = Math.min(50, (parseFloat(DOM.kgFeed.value)||0)+0.5).toFixed(1);
 
+    // Akcje w Kafelkach Uli
     const cardBtn = e.target.closest('button[data-hive]');
     if (cardBtn) {
       const hId = parseInt(cardBtn.dataset.hive);
@@ -203,8 +212,10 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    // Modal
     if (e.target === DOM.modal || e.target.id === 'btn-close-modal') DOM.modal.classList.add('hidden');
     
+    // Tabele edycja/usuwanie
     const actionBtn = e.target.closest('button[data-id]');
     if (actionBtn) {
       const id = actionBtn.dataset.id;
@@ -223,6 +234,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Selecty
   if (DOM.selHive) DOM.selHive.addEventListener('change', e => qsid('form-hive-title').textContent = `Przegląd: ${getHiveName(e.target.value)}`);
   if (DOM.selFeedHive) DOM.selFeedHive.addEventListener('change', e => qsid('form-feeding-title').textContent = `🍯 Karmienie: ${getHiveName(e.target.value)}`);
   if (DOM.selTreatHive) DOM.selTreatHive.addEventListener('change', e => qsid('form-treatment-title').textContent = `💉 Leczenie: ${getHiveName(e.target.value)}`);
@@ -251,6 +263,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // === SUBMIT FORMULARZY ===
+  // 1. Przegląd
   if (DOM.inspForm) {
     DOM.inspForm.addEventListener('submit', e => {
       e.preventDefault();
@@ -296,6 +309,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // 2. Karmienie
   if (DOM.feedForm) {
     DOM.feedForm.addEventListener('submit', e => {
       e.preventDefault();
@@ -331,6 +345,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // 3. Leczenie
   if (DOM.treatForm) {
     DOM.treatForm.addEventListener('submit', e => {
       e.preventDefault();
@@ -672,7 +687,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (n !== null) { hiveQueens[id] = n.trim(); Store.set(KEYS.QUEENS, hiveQueens); renderHivesGrid(); renderSheetTable(); }
   }
 
-  // === INTEGRACJA GOOGLE SHEETS ===
+  // === INTEGRACJA GOOGLE SHEETS (Z RYGORYSTYCZNĄ WALIDACJĄ) ===
   function saveLocalRecordState(type) {
     if (type === 'inspection') Store.set(KEYS.INSPECTIONS, inspections);
     if (type === 'feeding') Store.set(KEYS.FEEDINGS, feedings);
@@ -721,13 +736,23 @@ document.addEventListener('DOMContentLoaded', () => {
       let added = 0;
       if (Array.isArray(remote)) {
         remote.forEach(rm => {
-          if (!inspections.some(lc => lc.hiveNum === rm.hiveNum && new Date(lc.timestamp).getTime() === new Date(rm.timestamp).getTime())) {
-            inspections.push(rm); added++;
+          // Walidacja: sprawdzenie czy rekord posiada id, poprawną datę oraz czy hiveNum mieści się w zakresie 1-18
+          const hNum = parseInt(rm.hiveNum, 10);
+          if (isNaN(hNum) || hNum < 1 || hNum > TOTAL_HIVES || !rm.id || !rm.timestamp || String(rm.timestamp).includes('Invalid')) {
+            return; // Odrzuca uszkodzone, puste lub śmieciowe wiersze
+          }
+          rm.hiveNum = hNum;
+
+          if (!inspections.some(lc => lc.id === rm.id || (lc.hiveNum === rm.hiveNum && new Date(lc.timestamp).getTime() === new Date(rm.timestamp).getTime()))) {
+            inspections.push(rm); 
+            added++;
           }
         });
         if (added > 0) {
           inspections.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-          Store.set(KEYS.INSPECTIONS, inspections); renderSheetTable(); renderHivesGrid();
+          Store.set(KEYS.INSPECTIONS, inspections); 
+          renderSheetTable(); 
+          renderHivesGrid();
         }
       }
       return added;
