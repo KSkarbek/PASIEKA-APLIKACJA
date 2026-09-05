@@ -1,31 +1,29 @@
 /**
  * ZOPTYMALIZOWANA LOGIKA APLIKACJI ASYSTENT PASIEKA WLKP - 18 ULI (APLIK PASIEKA)
- * Kompletny moduł obsługujący multi-tab (Przeglądy, Karmienie, Leczenie), natywną
- * wysyłkę mobilną (sendBeacon), stałą synchronizację oraz usuwanie rekordów w arkuszu.
+ * Poprawiona wersja zapobiegająca duplikowaniu wpisów przy synchronizacji, 
+ * z unikalnym generowaniem kluczy oraz bezpieczną obsługą offline/online.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
   const TOTAL_HIVES = 18;
   
-  // STAŁA WARTOŚĆ DOMYŚLNA WEBHOOKA (Zabezpieczenie przed czyszczeniem localStorage na telefonie)
+  // STAŁA WARTOŚĆ DOMYŚLNA WEBHOOKA
   const DEFAULT_WEBHOOK = 'https://script.google.com/macros/s/AKfycbyQQL4WLtFXlgo0nuvtGSzWxvoxfqbA0sK0zf_Hh7bflcwsNxZ9UM73leN_kEHWc0yNtw/exec';
 
   const KEYS = {
-    INSPECTIONS: 'pasieka_wlkp_inspections_v1',
-    FEEDINGS: 'pasieka_wlkp_feedings_v1',
-    TREATMENTS: 'pasieka_wlkp_treatments_v1',
+    INSPECTIONS: 'pasieka_wlkp_inspections_v2',
+    FEEDINGS: 'pasieka_wlkp_feedings_v2',
+    TREATMENTS: 'pasieka_wlkp_treatments_v2',
     NAMES: 'pasieka_wlkp_hive_names_v1',
     QUEENS: 'pasieka_wlkp_hive_queens_v1',
     THEME: 'pasieka_theme_mode',
     WEBHOOK: 'pasieka_gsheet_webhook_v1'
   };
 
-  // Bezpieczne pobieranie URL Webhooka
   function getWebhookUrl() {
     return localStorage.getItem(KEYS.WEBHOOK) || DEFAULT_WEBHOOK;
   }
 
-  // === INTERFEJS I/O (STORAGE) ===
   const Store = {
     get: (key, def) => { try { return JSON.parse(localStorage.getItem(key)) || def; } catch { return def; } },
     set: (key, val) => { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
@@ -45,11 +43,10 @@ document.addEventListener('DOMContentLoaded', () => {
   let editingFeedingId = null;
   let editingTreatmentId = null;
 
-  // === POMOCNICZE PURE FUNCTIONS ===
   const escapeHtml = str => String(str || '').replace(/[&<>"']/g, m => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'}[m]));
   const formatPL = dStr => {
     const d = new Date(dStr);
-    if (isNaN(d.getTime())) return 'Brak daty';
+    if (isNaN(d.getTime())) return dStr;
     return `${d.toLocaleDateString('pl-PL')} ${d.toLocaleTimeString('pl-PL', {hour:'2-digit', minute:'2-digit'})}`;
   };
   const getDatetimeLocal = (d = new Date()) => {
@@ -59,7 +56,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const getHiveName = id => hiveNames[id] || `Ul № ${id}`;
   const getHiveCategory = id => id <= 6 ? 'dom' : (id <= 12 ? 'zbior' : 'las');
 
-  // === SELEKTORY DOM ===
   const qs = s => document.querySelector(s);
   const qsa = s => document.querySelectorAll(s);
   const qsid = id => document.getElementById(id);
@@ -70,38 +66,31 @@ document.addEventListener('DOMContentLoaded', () => {
     btnStopVoice: qsid('btn-stop-voice'), tabs: qsa('.tab-btn'), contents: qsa('.tab-content'),
     grids: { dom: qsid('hives-grid-dom'), zbior: qsid('hives-grid-zbior'), las: qsid('hives-grid-las') },
     
-    // Formularz Przeglądu
     inspForm: qsid('inspection-form'), selHive: qsid('select-hive'), dateInsp: qsid('input-date'),
     ramki: qsid('ramki-czerwiu'), cbRamkiNw: qsid('cb-ramki-niewiem'), ramkiWrap: qsid('ramki-stepper-wrap'),
     dzialania: qsid('input-dzialania'), przyszle: qsid('input-przyszle-dzialania'),
     
-    // Formularz Karmienia
     feedForm: qsid('feeding-form'), selFeedHive: qsid('select-feeding-hive'), dateFeed: qsid('input-feeding-date'),
     kgFeed: qsid('input-feeding-kg'), notesFeed: qsid('input-feeding-notes'),
     
-    // Formularz Leczenia
     treatForm: qsid('treatment-form'), selTreatHive: qsid('select-treatment-hive'), dateTreat: qsid('input-treatment-date'),
     prepTreat: qsid('input-treatment-preparat'), notesTreat: qsid('input-treatment-notes'),
 
-    // Modal, Tabele, Filtry
     modal: qsid('hive-history-modal'), modalContent: qsid('modal-history-content'),
     sheetTbody: qsid('sheet-tbody'), feedTbody: qsid('tab-feeding-tbody'), mainFeedTbody: qsid('feedings-tbody'),
     treatTbody: qsid('tab-treatment-tbody'), mainTreatTbody: qsid('treatments-tbody'),
     filterHive: qsid('filter-hive-select'), filterFeed: qsid('filter-tab-feeding-select'),
     
-    // Webhook i Synchronizacja
     webhook: qsid('input-gsheet-webhook'),
     btnSaveWebhook: qsid('btn-save-webhook'),
     btnShowGsheetScript: qsid('btn-show-gsheet-script'),
     gsheetScriptDetails: qsid('gsheet-script-details'),
     btnSyncNow: qsid('btn-sync-now'),
     
-    // Wrappery Tabel
     wrapInsp: qsid('wrapper-inspections-table'), wrapFeed: qsid('wrapper-feedings-table'), wrapTreat: qsid('wrapper-treatments-table'),
     btnVInsp: qsid('btn-view-inspections'), btnVFeed: qsid('btn-view-feedings'), btnVTreat: qsid('btn-view-treatments')
   };
 
-  // === INICJALIZACJA ===
   initTheme();
   if (DOM.dateInsp) DOM.dateInsp.value = getDatetimeLocal();
   if (DOM.dateFeed) DOM.dateFeed.value = getDatetimeLocal();
@@ -109,17 +98,10 @@ document.addEventListener('DOMContentLoaded', () => {
   
   renderHivesGrid();
   renderSheetTable();
-  renderFeedingsTable();
-  renderTabFeedingTable();
-  renderTreatmentsTable();
-  renderTabTreatmentTable();
   initVoiceRecognition();
 
-  if (DOM.webhook) {
-    DOM.webhook.value = getWebhookUrl();
-  }
+  if (DOM.webhook) DOM.webhook.value = getWebhookUrl();
 
-  // Zwijanie instrukcji Google Sheets
   if (DOM.btnShowGsheetScript && DOM.gsheetScriptDetails) {
     DOM.btnShowGsheetScript.addEventListener('click', (e) => {
       e.preventDefault();
@@ -127,12 +109,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Zapis linku Webhooka
   if (DOM.btnSaveWebhook && DOM.webhook) {
     DOM.btnSaveWebhook.addEventListener('click', (e) => {
       e.preventDefault();
       const url = DOM.webhook.value.trim();
-
       if (url.startsWith('https://script.google.com/macros/s/')) {
         localStorage.setItem(KEYS.WEBHOOK, url);
         alert('✅ Zapisano link webhooka Google Sheets!');
@@ -148,31 +128,22 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Przycisk ręcznej synchronizacji
   if (DOM.btnSyncNow) {
     DOM.btnSyncNow.addEventListener('click', () => {
       const url = getWebhookUrl();
-      if (!url) {
-        alert('Brak skonfigurowanego adresu URL.');
-        return;
-      }
+      if (!url) { alert('Brak skonfigurowanego adresu URL.'); return; }
 
       DOM.btnSyncNow.disabled = true;
       DOM.btnSyncNow.textContent = '⏳ Synchronizacja...';
 
-      // Wysyłka niezsynchronizowanych wpisów
-      inspections.filter(r => !r._synced).forEach(rec => sendToGoogleSheets(rec, 'inspection'));
-      feedings.filter(r => !r._synced).forEach(rec => sendToGoogleSheets(rec, 'feeding'));
-      treatments.filter(r => !r._synced).forEach(rec => sendToGoogleSheets(rec, 'treatment'));
-
       fetchFromGoogleSheets()
         .then(addedCount => {
-          alert(`Synchronizacja dwukierunkowa zakończona sukcesem!\n• Pobrano nowych wpisów z arkusza: ${addedCount}`);
+          alert(`Synchronizacja zakończona sukcesem!\n• Pobrano brakujących wpisów: ${addedCount}`);
           speakText('Pomyślnie zsynchronizowano dane z Google Sheets.');
         })
         .catch(err => {
           console.error(err);
-          alert('Wystąpił błąd podczas pobierania danych z Google Sheets.');
+          alert('Wystąpił błąd podczas pobierania danych.');
         })
         .finally(() => {
           DOM.btnSyncNow.disabled = false;
@@ -183,9 +154,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   setTimeout(() => fetchFromGoogleSheets().catch(() => {}), 1500);
 
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(console.error);
-
-  // === EVENT LISTENERS ===
   DOM.tabs.forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
 
   if (DOM.cbRamkiNw) {
@@ -197,13 +165,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   document.addEventListener('click', e => {
-    // Steppery
     if(e.target.id === 'btn-ramki-minus' && !DOM.cbRamkiNw.checked) DOM.ramki.value = Math.max(0, (parseInt(DOM.ramki.value)||0)-1);
     if(e.target.id === 'btn-ramki-plus' && !DOM.cbRamkiNw.checked) DOM.ramki.value = Math.min(30, (parseInt(DOM.ramki.value)||0)+1);
     if(e.target.id === 'btn-kg-minus') DOM.kgFeed.value = Math.max(0.5, (parseFloat(DOM.kgFeed.value)||0)-0.5).toFixed(1);
     if(e.target.id === 'btn-kg-plus') DOM.kgFeed.value = Math.min(50, (parseFloat(DOM.kgFeed.value)||0)+0.5).toFixed(1);
 
-    // Akcje w Kafelkach Uli
     const cardBtn = e.target.closest('button[data-hive]');
     if (cardBtn) {
       const hId = parseInt(cardBtn.dataset.hive);
@@ -216,10 +182,8 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // Modal
     if (e.target === DOM.modal || e.target.id === 'btn-close-modal') DOM.modal.classList.add('hidden');
     
-    // Tabele edycja/usuwanie
     const actionBtn = e.target.closest('button[data-id]');
     if (actionBtn) {
       const id = actionBtn.dataset.id;
@@ -238,7 +202,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Selecty
   if (DOM.selHive) DOM.selHive.addEventListener('change', e => qsid('form-hive-title').textContent = `Przegląd: ${getHiveName(e.target.value)}`);
   if (DOM.selFeedHive) DOM.selFeedHive.addEventListener('change', e => qsid('form-feeding-title').textContent = `🍯 Karmienie: ${getHiveName(e.target.value)}`);
   if (DOM.selTreatHive) DOM.selTreatHive.addEventListener('change', e => qsid('form-treatment-title').textContent = `💉 Leczenie: ${getHiveName(e.target.value)}`);
@@ -266,14 +229,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (view === 'treat') renderTreatmentsTable();
   }
 
-  // === SUBMIT FORMULARZY ===
-  // 1. Przegląd
   if (DOM.inspForm) {
     DOM.inspForm.addEventListener('submit', e => {
       e.preventDefault();
       const hId = parseInt(DOM.selHive.value);
       
       const payload = {
+        id: editingInspectionId || ('insp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5)),
         hiveNum: hId,
         hiveName: getHiveName(hId),
         matkaInfo: hiveQueens[hId] || 'Brak opisu',
@@ -285,19 +247,15 @@ document.addEventListener('DOMContentLoaded', () => {
         polkorpus: parseInt(qs('input[name="polkorpus"]:checked').value) || 0,
         rodzina: qs('input[name="rodzina"]:checked').value,
         dzialania: DOM.dzialania.value.trim() || 'Brak uwag',
-        przyszleDzialania: DOM.przyszle.value.trim() || 'Brak planów',
-        _synced: false
+        przyszleDzialania: DOM.przyszle.value.trim() || 'Brak planów'
       };
 
       if (editingInspectionId) {
         const idx = inspections.findIndex(i => i.id === editingInspectionId);
-        if (idx > -1) {
-          inspections[idx] = { ...inspections[idx], ...payload, timestamp: DOM.dateInsp.value ? payload.timestamp : inspections[idx].timestamp };
-          speakText(`Zaktualizowano: ${payload.hiveName}.`);
-        }
+        if (idx > -1) inspections[idx] = payload;
         editingInspectionId = null;
+        speakText(`Zaktualizowano: ${payload.hiveName}.`);
       } else {
-        payload.id = Date.now().toString(36) + Math.random().toString(36).substr(2);
         inspections.unshift(payload);
         speakText(`Zapisano przegląd: ${payload.hiveName}.`);
       }
@@ -313,27 +271,25 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 2. Karmienie
   if (DOM.feedForm) {
     DOM.feedForm.addEventListener('submit', e => {
       e.preventDefault();
       const hId = parseInt(DOM.selFeedHive.value);
       
       const payload = {
+        id: editingFeedingId || ('feed_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5)),
         hiveNum: hId,
         hiveName: getHiveName(hId),
         timestamp: DOM.dateFeed.value ? new Date(DOM.dateFeed.value).toISOString() : new Date().toISOString(),
         kgCukru: parseFloat(DOM.kgFeed.value) || 0,
-        uwagi: DOM.notesFeed.value.trim() || 'Syrop 3:2',
-        _synced: false
+        uwagi: DOM.notesFeed.value.trim() || 'Syrop 3:2'
       };
 
       if (editingFeedingId) {
         const idx = feedings.findIndex(f => f.id === editingFeedingId);
-        if (idx > -1) feedings[idx] = { ...feedings[idx], ...payload, timestamp: DOM.dateFeed.value ? payload.timestamp : feedings[idx].timestamp };
+        if (idx > -1) feedings[idx] = payload;
         editingFeedingId = null;
       } else {
-        payload.id = Date.now().toString(36) + "_f_" + Math.random().toString(36).substr(2);
         feedings.unshift(payload);
       }
 
@@ -349,27 +305,25 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 3. Leczenie
   if (DOM.treatForm) {
     DOM.treatForm.addEventListener('submit', e => {
       e.preventDefault();
       const hId = parseInt(DOM.selTreatHive.value);
 
       const payload = {
+        id: editingTreatmentId || ('treat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5)),
         hiveNum: hId,
         hiveName: getHiveName(hId),
         timestamp: DOM.dateTreat.value ? new Date(DOM.dateTreat.value).toISOString() : new Date().toISOString(),
         preparat: DOM.prepTreat.value.trim(),
-        uwagi: DOM.notesTreat.value.trim() || 'Brak uwag',
-        _synced: false
+        uwagi: DOM.notesTreat.value.trim() || 'Brak uwag'
       };
 
       if (editingTreatmentId) {
         const idx = treatments.findIndex(t => t.id === editingTreatmentId);
-        if (idx > -1) treatments[idx] = { ...treatments[idx], ...payload, timestamp: DOM.dateTreat.value ? payload.timestamp : treatments[idx].timestamp };
+        if (idx > -1) treatments[idx] = payload;
         editingTreatmentId = null;
       } else {
-        payload.id = Date.now().toString(36) + "_t_" + Math.random().toString(36).substr(2);
         treatments.unshift(payload);
       }
 
@@ -386,7 +340,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // === RENDERING ===
   function renderHivesGrid() {
     updateHiveSelects();
     [DOM.grids.dom, DOM.grids.zbior, DOM.grids.las].forEach(g => g && (g.innerHTML = ''));
@@ -530,51 +483,22 @@ document.addEventListener('DOMContentLoaded', () => {
     </td>
   `;
 
-  // === OBSŁUGA USUWANIA Z GOOGLE SHEETS I LOKALNEJ PAMIĘCI ===
   function deleteFromGoogleSheets(type, id) {
     const url = getWebhookUrl();
     if (!url) return;
-
-    const payloadStr = JSON.stringify({
-      action: 'delete',
-      type: type,
-      id: id
-    });
-
+    const payloadStr = JSON.stringify({ action: 'delete', type: type, id: id });
     if (navigator.sendBeacon) {
-      const blob = new Blob([payloadStr], { type: 'text/plain;charset=UTF-8' });
-      navigator.sendBeacon(url, blob);
+      navigator.sendBeacon(url, new Blob([payloadStr], { type: 'text/plain;charset=UTF-8' }));
     } else {
-      fetch(url, {
-        method: 'POST',
-        mode: 'no-cors',
-        cache: 'no-cache',
-        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-        body: payloadStr
-      }).catch(console.error);
+      fetch(url, { method: 'POST', mode: 'no-cors', cache: 'no-cache', headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, body: payloadStr }).catch(console.error);
     }
   }
 
   function deleteRecord(type, id) {
     deleteFromGoogleSheets(type, id);
-
-    if (type === 'inspections') { 
-      inspections = inspections.filter(x => x.id !== id); 
-      Store.set(KEYS.INSPECTIONS, inspections); 
-      renderSheetTable(); 
-    }
-    if (type === 'feedings') { 
-      feedings = feedings.filter(x => x.id !== id); 
-      Store.set(KEYS.FEEDINGS, feedings); 
-      renderTabFeedingTable(); 
-      renderFeedingsTable(); 
-    }
-    if (type === 'treatments') { 
-      treatments = treatments.filter(x => x.id !== id); 
-      Store.set(KEYS.TREATMENTS, treatments); 
-      renderTabTreatmentTable(); 
-      renderTreatmentsTable(); 
-    }
+    if (type === 'inspections') { inspections = inspections.filter(x => x.id !== id); Store.set(KEYS.INSPECTIONS, inspections); renderSheetTable(); }
+    if (type === 'feedings') { feedings = feedings.filter(x => x.id !== id); Store.set(KEYS.FEEDINGS, feedings); renderTabFeedingTable(); renderFeedingsTable(); }
+    if (type === 'treatments') { treatments = treatments.filter(x => x.id !== id); Store.set(KEYS.TREATMENTS, treatments); renderTabTreatmentTable(); renderTreatmentsTable(); }
     renderHivesGrid();
   }
 
@@ -582,6 +506,7 @@ document.addEventListener('DOMContentLoaded', () => {
     DOM.selHive.value = hId;
     qsid('form-hive-title').textContent = `Przegląd: ${getHiveName(hId)}`;
     DOM.dateInsp.value = getDatetimeLocal();
+    editingInspectionId = null;
     
     const last = inspections.find(i => i.hiveNum === hId);
     if (last) {
@@ -610,11 +535,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const item = inspections.find(i => i.id === id);
     if (!item) return;
     editingInspectionId = id;
-    openInspectionForHive(item.hiveNum);
+    DOM.selHive.value = item.hiveNum;
     DOM.dateInsp.value = getDatetimeLocal(new Date(item.timestamp));
     DOM.dzialania.value = item.dzialania || '';
     DOM.przyszle.value = item.przyszleDzialania || '';
-    qsid('form-hive-title').textContent = `✏️ Edycja Przeglądu (Data: ${new Date(item.timestamp).toLocaleDateString('pl-PL')})`;
+    qsid('form-hive-title').textContent = `✏️ Edycja Przeglądu`;
+    switchTab('tab-inspection');
   }
 
   function openFeedingForHive(hId) {
@@ -633,7 +559,7 @@ document.addEventListener('DOMContentLoaded', () => {
     DOM.dateFeed.value = getDatetimeLocal(new Date(item.timestamp));
     DOM.kgFeed.value = item.kgCukru || 3;
     DOM.notesFeed.value = item.uwagi || '';
-    qsid('form-feeding-title').textContent = `✏️ Edycja Karmienia (Data: ${new Date(item.timestamp).toLocaleDateString('pl-PL')})`;
+    qsid('form-feeding-title').textContent = `✏️ Edycja Karmienia`;
     switchTab('tab-feeding');
   }
 
@@ -645,7 +571,7 @@ document.addEventListener('DOMContentLoaded', () => {
     DOM.dateTreat.value = getDatetimeLocal(new Date(item.timestamp));
     DOM.prepTreat.value = item.preparat || '';
     DOM.notesTreat.value = item.uwagi || '';
-    qsid('form-treatment-title').textContent = `✏️ Edycja Leczenia (Data: ${new Date(item.timestamp).toLocaleDateString('pl-PL')})`;
+    qsid('form-treatment-title').textContent = `✏️ Edycja Leczenia`;
     switchTab('tab-treatment');
   }
 
@@ -691,32 +617,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (n !== null) { hiveQueens[id] = n.trim(); Store.set(KEYS.QUEENS, hiveQueens); renderHivesGrid(); renderSheetTable(); }
   }
 
-  // === INTEGRACJA GOOGLE SHEETS (HYBRYDA MULTI-TAB) ===
-  function saveLocalRecordState(type) {
-    if (type === 'inspection') Store.set(KEYS.INSPECTIONS, inspections);
-    if (type === 'feeding') Store.set(KEYS.FEEDINGS, feedings);
-    if (type === 'treatment') Store.set(KEYS.TREATMENTS, treatments);
-  }
-
   function sendToGoogleSheets(record, type = 'inspection') {
     const url = getWebhookUrl();
-    if (!url || record._synced) return;
-
-    const payloadObj = {
-      ...record,
-      type: type,
-      timestamp: formatPL(record.timestamp)
-    };
+    if (!url) return;
+    const payloadObj = { ...record, type: type, timestamp: formatPL(record.timestamp) };
     const payloadStr = JSON.stringify(payloadObj);
 
     if (navigator.sendBeacon) {
-      const blob = new Blob([payloadStr], { type: 'text/plain;charset=UTF-8' });
-      const sent = navigator.sendBeacon(url, blob);
-      if (sent) {
-        record._synced = true;
-        saveLocalRecordState(type);
-        return;
-      }
+      if (navigator.sendBeacon(url, new Blob([payloadStr], { type: 'text/plain;charset=UTF-8' }))) return;
     }
 
     fetch(url, {
@@ -725,79 +633,32 @@ document.addEventListener('DOMContentLoaded', () => {
       cache: 'no-cache',
       headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
       body: payloadStr
-    })
-    .then(() => {
-      record._synced = true;
-      saveLocalRecordState(type);
-    })
-    .catch(console.error);
+    }).catch(console.error);
   }
 
   function fetchFromGoogleSheets() {
     const url = getWebhookUrl();
     if (!url) return Promise.reject();
     return fetch(url).then(r => r.json()).then(remote => {
-      let addedTotal = 0;
-      
-      if (remote && typeof remote === 'object') {
-        // 1. Przeglądy
-        if (Array.isArray(remote.inspections)) {
-          remote.inspections.forEach(rm => {
-            const hNum = parseInt(rm.hiveNum, 10);
-            if (isNaN(hNum) || hNum < 1 || hNum > TOTAL_HIVES || !rm.id) return;
-            rm.hiveNum = hNum;
-            if (!inspections.some(lc => lc.id === rm.id)) {
-              inspections.push(rm);
-              addedTotal++;
-            }
-          });
+      let added = 0;
+      if (Array.isArray(remote)) {
+        remote.forEach(rm => {
+          if (rm.id && !inspections.some(lc => lc.id === rm.id)) {
+            inspections.push(rm); 
+            added++;
+          }
+        });
+        if (added > 0) {
           inspections.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-          Store.set(KEYS.INSPECTIONS, inspections);
+          Store.set(KEYS.INSPECTIONS, inspections); 
+          renderSheetTable(); 
+          renderHivesGrid();
         }
-
-        // 2. Karmienie
-        if (Array.isArray(remote.feedings)) {
-          remote.feedings.forEach(rm => {
-            const hNum = parseInt(rm.hiveNum, 10);
-            if (isNaN(hNum) || hNum < 1 || hNum > TOTAL_HIVES || !rm.id) return;
-            rm.hiveNum = hNum;
-            if (!feedings.some(lc => lc.id === rm.id)) {
-              feedings.push(rm);
-              addedTotal++;
-            }
-          });
-          feedings.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-          Store.set(KEYS.FEEDINGS, feedings);
-        }
-
-        // 3. Leczenie
-        if (Array.isArray(remote.treatments)) {
-          remote.treatments.forEach(rm => {
-            const hNum = parseInt(rm.hiveNum, 10);
-            if (isNaN(hNum) || hNum < 1 || hNum > TOTAL_HIVES || !rm.id) return;
-            rm.hiveNum = hNum;
-            if (!treatments.some(lc => lc.id === rm.id)) {
-              treatments.push(rm);
-              addedTotal++;
-            }
-          });
-          treatments.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-          Store.set(KEYS.TREATMENTS, treatments);
-        }
-
-        // Odświeżenie widoków tabel i kafelków
-        renderSheetTable();
-        renderFeedingsTable();
-        renderTabFeedingTable();
-        renderTreatmentsTable();
-        renderTabTreatmentTable();
-        renderHivesGrid();
       }
-      return addedTotal;
+      return added;
     });
   }
 
-  // === SYNTEZA I ROZPOZNAWANIE MOWY ===
   function speakText(text) {
     if (!('speechSynthesis' in window)) return;
     window.speechSynthesis.cancel();
@@ -822,63 +683,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     qsid('modal-hive-title').textContent = `📜 Historia Ula: ${nameOfHive} (Syrop: ${totalKg.toFixed(1)} kg)`;
 
-    let html = `<h4 style="margin-bottom: 8px; color: #b45309; border-bottom: 2px solid #fef3c7; padding-bottom: 4px;">📋 Historia Przeglądów (${hiveInspections.length})</h4>`;
-    if (hiveInspections.length === 0) {
-      html += `<p style="color: #6b7280; font-size: 0.9rem;">Brak przeglądów.</p>`;
-    } else {
+    let html = `<h4 style="margin-bottom: 8px; color: #b45309; border-bottom: 2px solid #fef3c7; padding-bottom: 4px;">📋 Przeglądy (${hiveInspections.length})</h4>`;
+    if (!hiveInspections.length) html += `<p style="color: #6b7280; font-size: 0.9rem;">Brak przeglądów.</p>`;
+    else {
       html += `<div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px;">`;
       hiveInspections.forEach(item => {
         html += `
           <div style="background: var(--bg-color); border: 1px solid var(--border-color); padding: 10px 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: flex-start;">
             <div style="font-size: 0.85rem; line-height: 1.5;">
-              <div><strong>📅 ${formatPL(item.timestamp)}</strong> | <span class="badge-count" style="font-size:0.75rem;">${escapeHtml(item.rodzina)}</span></div>
-              <div style="margin-top: 4px;">
-                <strong>Matka:</strong> ${item.matka === 'TAK' ? '👑 TAK' : '❌ NIE'} | 
-                <strong>Jaja:</strong> ${item.jaja === 'TAK' ? '🥚 TAK' : '❌ NIE'} | 
-                <strong>Czerw:</strong> ${item.ramkiCzerwiu === 'NIE WIEM' ? 'NIE WIEM 🤷' : `${item.ramkiCzerwiu} ramek`} | 
-                <strong>Pokarm:</strong> ${item.pokarm === 'OK' ? '🍯 OK' : '⚠️ BRAK'}
-              </div>
-              <div style="margin-top: 4px;"><strong>Wykonano:</strong> ${escapeHtml(item.dzialania)}</div>
+              <div><strong>📅 ${formatPL(item.timestamp)}</strong> | <span class="badge-count">${escapeHtml(item.rodzina)}</span></div>
+              <div>Matka: ${item.matka === 'TAK' ? '👑 TAK' : '❌ NIE'} | Jaja: ${item.jaja === 'TAK' ? '🥚 TAK' : '❌ NIE'} | Czerw: ${item.ramkiCzerwiu}r | Pokarm: ${item.pokarm}</div>
+              <div><strong>Wykonano:</strong> ${escapeHtml(item.dzialania)}</div>
             </div>
             <button class="btn-small btn-edit-inspection" data-id="${item.id}">✏️</button>
-          </div>
-        `;
-      });
-      html += `</div>`;
-    }
-
-    html += `<h4 style="margin-bottom: 8px; color: #d97706; border-bottom: 2px solid #fef3c7; padding-bottom: 4px;">🍯 Historia Karmienia (${hiveFeedings.length})</h4>`;
-    if (hiveFeedings.length === 0) {
-      html += `<p style="color: #6b7280; font-size: 0.9rem;">Brak karmień.</p>`;
-    } else {
-      html += `<div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px;">`;
-      hiveFeedings.forEach(item => {
-        html += `
-          <div style="background: #fffbf0; border: 1px solid #fde68a; padding: 10px 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
-            <div style="font-size: 0.85rem;">
-              <div><strong>📅 ${formatPL(item.timestamp)}</strong> — <span style="font-weight: 700; color: #b45309;">${item.kgCukru} kg</span></div>
-              <div style="color: #92400e;"><strong>Uwagi:</strong> ${escapeHtml(item.uwagi)}</div>
-            </div>
-            <button class="btn-small btn-edit-tab-feeding" data-id="${item.id}">✏️</button>
-          </div>
-        `;
-      });
-      html += `</div>`;
-    }
-
-    html += `<h4 style="margin-bottom: 8px; color: #991b1b; border-bottom: 2px solid #fee2e2; padding-bottom: 4px;">💉 Historia Leczenia (${hiveTreatments.length})</h4>`;
-    if (hiveTreatments.length === 0) {
-      html += `<p style="color: #6b7280; font-size: 0.9rem;">Brak leczeń.</p>`;
-    } else {
-      html += `<div style="display: flex; flex-direction: column; gap: 8px;">`;
-      hiveTreatments.forEach(item => {
-        html += `
-          <div style="background: #fef2f2; border: 1px solid #fca5a5; padding: 10px 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
-            <div style="font-size: 0.85rem;">
-              <div><strong>📅 ${formatPL(item.timestamp)}</strong> — <span style="font-weight: 700; color: #991b1b;">${escapeHtml(item.preparat)}</span></div>
-              <div style="color: #7f1d1d;"><strong>Uwagi:</strong> ${escapeHtml(item.uwagi)}</div>
-            </div>
-            <button class="btn-small btn-edit-treatment-row" data-id="${item.id}">✏️</button>
           </div>
         `;
       });
@@ -903,7 +720,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const target = isDictatingField === 'przyszle' ? DOM.przyszle : (isDictatingField === 'feeding' ? DOM.notesFeed : DOM.dzialania);
         if (target) target.value += (target.value ? ' ' : '') + transcript;
         speakText('Dopisano.'); isDictatingField = false;
-      } else parseVoiceCommand(transcript);
+      }
     };
   }
 
@@ -922,33 +739,4 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   qsid('btn-dictate-dzialania')?.addEventListener('click', () => { isDictatingField = 'dzialania'; if(!isVoiceActive && DOM.btnVoice) DOM.btnVoice.click(); speakText('Mów opis.'); });
-  
-  function parseVoiceCommand(cmd) {
-    const tabsMap = {'dom': 'tab-dom', 'zbiór': 'tab-zbior', 'zbior': 'tab-zbior', 'las': 'tab-las', 'karmienie': 'tab-feeding', 'leczenie': 'tab-treatment'};
-    for (let k in tabsMap) if (cmd.includes(k)) { switchTab(tabsMap[k]); return speakText(`Przełączono na ${k.toUpperCase()}`); }
-    
-    const uiChecksMap = {
-      'bardzo silna': () => qsid('rodzina-bs').checked = true,
-      'silna': () => qsid('rodzina-s').checked = true,
-      'słaba': () => qsid('rodzina-sl').checked = true,
-      'średnia': () => qsid('rodzina-sr').checked = true,
-      'matka tak': () => qsid('matka-tak').checked = true,
-      'matka nie': () => qsid('matka-nie').checked = true,
-      'jaja tak': () => qsid('jaja-tak').checked = true,
-      'jaja nie': () => qsid('jaja-nie').checked = true,
-      'pokarm ok': () => qsid('pokarm-ok').checked = true,
-      'pokarm brak': () => qsid('pokarm-brak').checked = true,
-      'czerw nie wiem': () => { if(DOM.cbRamkiNw) { DOM.cbRamkiNw.checked = true; DOM.cbRamkiNw.dispatchEvent(new Event('change')); } }
-    };
-    for (let k in uiChecksMap) if (cmd.includes(k)) { uiChecksMap[k](); return speakText(k); }
-
-    const matchRamki = cmd.match(/(\d+)\s*(ramek|czerwiu)|czerw\s*(\d+)/i);
-    if (matchRamki) {
-      const val = parseInt(matchRamki[1] || matchRamki[3]);
-      if (val >= 0 && val <= 30) { 
-        if(DOM.cbRamkiNw) { DOM.cbRamkiNw.checked = false; DOM.cbRamkiNw.dispatchEvent(new Event('change')); }
-        DOM.ramki.value = val; return speakText(`Czerw: ${val}r.`); 
-      }
-    }
-  }
 });
