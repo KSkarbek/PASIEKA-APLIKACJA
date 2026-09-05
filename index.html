@@ -311,50 +311,72 @@
 
   <!-- ZAKŁADKA 7: HISTORIA I ZBIORCZE TABELE -->
   <section id="tab-sheet" class="tab-content">
-    <div class="card">
-      <div class="card-header flex-between">
-        <h2>📊 Zbiorczy Arkusz Danych</h2>
-        <div class="flex-row gap-sm">
-          <select id="filter-hive-select" class="input-control select-sm"></select>
-          <button id="btn-sync-now" class="btn-primary btn-sm">🔄 Synchronizuj z Google Sheets</button>
+    <div class="card sheet-card">
+      <div class="sheet-toolbar">
+        <div>
+          <h2>Arkusz Kalkulacyjny Pasieki</h2>
+          <p class="text-muted">Synchro z plikiem Google Sheets: APLIK PASIEKA</p>
+        </div>
+        <div class="sheet-actions">
+          <a href="https://docs.google.com/spreadsheets/u/0/" target="_blank" class="btn-gsheet" style="padding: 10px 14px; text-decoration:none;">
+            🟢 Otwórz plik APLIK PASIEKA
+          </a>
+          <button id="btn-sync-now" class="btn-primary" style="padding: 10px 14px; font-size: 0.9rem;">
+            🔄 Synchronizuj z Google Sheets
+          </button>
         </div>
       </div>
 
-      <div class="tab-toggle-bar margin-top-md">
-        <button id="btn-view-inspections" class="btn-tab-toggle active">📋 Przeglądy</button>
-        <button id="btn-view-feedings" class="btn-tab-toggle">🍯 Karmienie</button>
-        <button id="btn-view-treatments" class="btn-tab-toggle">💉 Leczenie</button>
-      </div>
-
-      <!-- KONFIGURACJA WEBHOOKA -->
-      <div class="webhook-config-box margin-top-md">
-        <button id="btn-show-gsheet-script" class="btn-small">⚙️ Ustawienia połączenia z Google Sheets</button>
-        <div id="gsheet-script-details" class="hidden margin-top-sm">
-          <label for="input-gsheet-webhook">URL Webhooka Google Apps Script:</label>
-          <div class="flex-row gap-sm margin-top-xs">
-            <input type="url" id="input-gsheet-webhook" class="input-control flex-1" placeholder="https://script.google.com/macros/s/.../exec">
-            <button id="btn-save-webhook" class="btn-primary btn-sm">Zapisz URL</button>
+      <div class="gsheet-sync-box" style="background: #f0fdf4; border: 1px solid #86efac; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+          <div>
+            <strong style="color: #166534; font-size: 0.95rem;">📊 Automatyczny Zapis w Google Sheets:</strong>
+            <div style="font-size: 0.85rem; color: #15803d; margin-top: 2px;">
+              Target: <strong>APLIK PASIEKA</strong>
+            </div>
+          </div>
+          <button id="btn-show-gsheet-script" class="btn-small" style="background:#ffffff; color:#15803d; border-color:#86efac; font-weight:700;">
+            ⚙️ Instrukcja połączenia
+          </button>
+        </div>
+        <div id="gsheet-script-details" class="hidden" style="margin-top: 12px; padding-top: 12px; border-top: 1px dashed #86efac; font-size: 0.85rem; color: #166534;">
+          <p style="margin-bottom: 6px;">Użyj kodu Apps Script udostępnionego w instrukcji połączenia.</p>
+          <div style="display:flex; gap:8px; align-items:center; margin-top:6px;">
+            <input type="text" id="input-gsheet-webhook" class="input-control" placeholder="Wklej URL z Apps Script (np. https://script.google.com/macros/s/.../exec)" style="font-size:0.85rem;">
+            <button id="btn-save-webhook" class="btn-excel" style="white-space:nowrap;">💾 Zapisz Link</button>
           </div>
         </div>
       </div>
 
+      <!-- PRZEŁĄCZNIK WIDOKU TABELI -->
+      <div class="tab-toggle-bar">
+        <button id="btn-view-inspections" class="btn-tab-toggle active">📋 Przeglądy Uli</button>
+        <button id="btn-view-feedings" class="btn-tab-toggle">🍯 Historia Karmienia</button>
+        <button id="btn-view-treatments" class="btn-tab-toggle">💉 Historia Leczenia</button>
+      </div>
+
+      <div class="filter-bar margin-top-sm">
+        <label for="filter-hive-select">Filtruj według ula:</label>
+        <select id="filter-hive-select" class="input-control select-sm"></select>
+      </div>
+
       <!-- TABELA PRZEGLĄDÓW -->
-      <div id="wrapper-inspections-table" class="table-wrapper margin-top-md">
-        <table class="data-table">
+      <div id="wrapper-inspections-table" class="table-wrapper">
+        <table id="sheet-table" class="data-table">
           <thead>
             <tr>
               <th>Data i Czas</th>
-              <th>Ul</th>
+              <th>Ul №</th>
               <th>Nazwa Ula</th>
               <th>Rodzina</th>
-              <th>Matka</th>
-              <th>Info Matka</th>
+              <th>Matka Status</th>
+              <th>Matka Opis</th>
               <th>Jaja</th>
-              <th>Czerw</th>
+              <th>Czerw (Ramki)</th>
               <th>Pokarm</th>
-              <th>Nadstawki</th>
-              <th>Działania</th>
-              <th>Plan</th>
+              <th>Półkorpus</th>
+              <th>Działania Wykonane</th>
+              <th>Przyszle Działania</th>
               <th>Akcje</th>
             </tr>
           </thead>
@@ -363,15 +385,15 @@
       </div>
 
       <!-- TABELA KARMIENIA -->
-      <div id="wrapper-feedings-table" class="table-wrapper margin-top-md hidden">
+      <div id="wrapper-feedings-table" class="table-wrapper hidden">
         <table class="data-table">
           <thead>
             <tr>
-              <th>Data</th>
-              <th>Ul</th>
+              <th>Data i Czas</th>
+              <th>Ul №</th>
               <th>Nazwa Ula</th>
-              <th>Ilość Cukru</th>
-              <th>Uwagi</th>
+              <th>Ilość Cukru (kg)</th>
+              <th>Uwagi / Syrop</th>
               <th>Akcje</th>
             </tr>
           </thead>
@@ -380,15 +402,15 @@
       </div>
 
       <!-- TABELA LECZENIA -->
-      <div id="wrapper-treatments-table" class="table-wrapper margin-top-md hidden">
+      <div id="wrapper-treatments-table" class="table-wrapper hidden">
         <table class="data-table">
           <thead>
             <tr>
-              <th>Data</th>
-              <th>Ul</th>
+              <th>Data i Czas</th>
+              <th>Ul №</th>
               <th>Nazwa Ula</th>
-              <th>Preparat</th>
-              <th>Uwagi</th>
+              <th>Preparat / Metoda</th>
+              <th>Dawka / Uwagi</th>
               <th>Akcje</th>
             </tr>
           </thead>
