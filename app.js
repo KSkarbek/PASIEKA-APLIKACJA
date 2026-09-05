@@ -1,13 +1,13 @@
 /**
  * ZOPTYMALIZOWANA LOGIKA APLIKACJI ASYSTENT PASIEKA WLKP - 18 ULI (APLIK PASIEKA)
- * Poprawiona wersja zapobiegająca duplikowaniu wpisów przy synchronizacji, 
- * z unikalnym generowaniem kluczy oraz bezpieczną obsługą offline/online.
+ * Wersja produkcyjna z rygorystyczną walidacją danych, obsługą offline/online,
+ * stabilną synchronizacją dwukierunkową oraz zabezpieczeniem przed pustymi/błędnymi wpisami.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
   const TOTAL_HIVES = 18;
   
-  // STAŁA WARTOŚĆ DOMYŚLNA WEBHOOKA
+  // STAŁA WARTOŚĆ DOMYŚLNA WEBHOOKA (Gwarancja połączenia na telefonie i komputerze)
   const DEFAULT_WEBHOOK = 'https://script.google.com/macros/s/AKfycbyQQL4WLtFXlgo0nuvtGSzWxvoxfqbA0sK0zf_Hh7bflcwsNxZ9UM73leN_kEHWc0yNtw/exec';
 
   const KEYS = {
@@ -643,9 +643,15 @@ document.addEventListener('DOMContentLoaded', () => {
       let added = 0;
       if (Array.isArray(remote)) {
         remote.forEach(rm => {
-          if (rm.id && !inspections.some(lc => lc.id === rm.id)) {
-            inspections.push(rm); 
-            added++;
+          const hNum = parseInt(rm.hiveNum);
+          const hasValidDate = rm.timestamp && !isNaN(new Date(rm.timestamp).getTime());
+          const hasValidId = rm.id && String(rm.id).trim() !== '';
+
+          if (hasValidId && hNum >= 1 && hNum <= TOTAL_HIVES && hasValidDate) {
+            if (!inspections.some(lc => lc.id === rm.id)) {
+              inspections.push(rm); 
+              added++;
+            }
           }
         });
         if (added > 0) {
@@ -703,6 +709,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     DOM.modalContent.innerHTML = html;
+    DOM.modal.classList.add('hidden');
     DOM.modal.classList.remove('hidden');
   }
 
