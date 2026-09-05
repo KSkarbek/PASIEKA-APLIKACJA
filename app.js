@@ -1,7 +1,7 @@
 /**
  * ZOPTYMALIZOWANA LOGIKA APLIKACJI ASYSTENT PASIEKA WLKP - 18 ULI (APLIK PASIEKA)
- * Pełna synchronizacja dwukierunkowa dla Przeglądów, Karmienia i Leczenia
- * z rygorystyczną walidacją numerów uli (1-18) i unormowaną obsługą błędów.
+ * Kompletny moduł z obsługą kart: Przeglądy, Karmienie, Leczenie, natywną wysyłką mobilną (sendBeacon),
+ * stałą synchronizacją oraz usuwaniem rekordów bezpośrednio z Google Sheets.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -11,9 +11,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const DEFAULT_WEBHOOK = 'https://script.google.com/macros/s/AKfycbyQQL4WLtFXlgo0nuvtGSzWxvoxfqbA0sK0zf_Hh7bflcwsNxZ9UM73leN_kEHWc0yNtw/exec';
 
   const KEYS = {
-    INSPECTIONS: 'pasieka_wlkp_inspections_v2',
-    FEEDINGS: 'pasieka_wlkp_feedings_v2',
-    TREATMENTS: 'pasieka_wlkp_treatments_v2',
+    INSPECTIONS: 'pasieka_wlkp_inspections_v1',
+    FEEDINGS: 'pasieka_wlkp_feedings_v1',
+    TREATMENTS: 'pasieka_wlkp_treatments_v1',
     NAMES: 'pasieka_wlkp_hive_names_v1',
     QUEENS: 'pasieka_wlkp_hive_queens_v1',
     THEME: 'pasieka_theme_mode',
@@ -46,7 +46,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const escapeHtml = str => String(str || '').replace(/[&<>"']/g, m => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'}[m]));
   const formatPL = dStr => {
     const d = new Date(dStr);
-    if (isNaN(d.getTime())) return dStr;
     return `${d.toLocaleDateString('pl-PL')} ${d.toLocaleTimeString('pl-PL', {hour:'2-digit', minute:'2-digit'})}`;
   };
   const getDatetimeLocal = (d = new Date()) => {
@@ -154,6 +153,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   setTimeout(() => fetchFromGoogleSheets().catch(() => {}), 1500);
 
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(console.error);
+
   DOM.tabs.forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
 
   if (DOM.cbRamkiNw) {
@@ -172,7 +173,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const cardBtn = e.target.closest('button[data-hive]');
     if (cardBtn) {
-      e.stopPropagation();
       const hId = parseInt(cardBtn.dataset.hive);
       if (cardBtn.classList.contains('btn-add-inspection')) openInspectionForHive(hId);
       if (cardBtn.classList.contains('btn-add-feeding')) openFeedingForHive(hId);
@@ -187,7 +187,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     const actionBtn = e.target.closest('button[data-id]');
     if (actionBtn) {
-      e.stopPropagation();
       const id = actionBtn.dataset.id;
       if (actionBtn.classList.contains('btn-delete-row') || actionBtn.classList.contains('btn-delete-inspection')) {
         if (confirm('Usunąć wpis przeglądu?')) deleteRecord('inspections', id);
@@ -581,7 +580,7 @@ document.addEventListener('DOMContentLoaded', () => {
     activeTab = tabId;
     DOM.tabs.forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
     DOM.contents.forEach(c => c.classList.toggle('active', c.id === tabId));
-    if (tabId === 'tab-sheet') renderSheetTable();
+    if (tabId === 'tab-sheet') { renderSheetTable(); renderFeedingsTable(); renderTreatmentsTable(); }
     if (tabId === 'tab-feeding') renderTabFeedingTable();
     if (tabId === 'tab-treatment') renderTabTreatmentTable();
     if (['tab-dom', 'tab-zbior', 'tab-las'].includes(tabId)) renderHivesGrid();
@@ -638,7 +637,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }).catch(console.error);
   }
 
-  // W PEŁNI ZSYNCHRONIZOWANE POBIERANIE WSZYSTKICH 3 ZAKŁADEK Z ARKUSZA
   function fetchFromGoogleSheets() {
     const url = getWebhookUrl();
     if (!url) return Promise.reject();
@@ -653,7 +651,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isNaN(hNum) || hNum < 1 || hNum > TOTAL_HIVES || !rm.id) return;
             rm.hiveNum = hNum;
             if (!inspections.some(lc => lc.id === rm.id)) {
-              inspections.push(rm);
+              inspections.push(rm); 
               addedTotal++;
             }
           });
@@ -668,7 +666,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isNaN(hNum) || hNum < 1 || hNum > TOTAL_HIVES || !rm.id) return;
             rm.hiveNum = hNum;
             if (!feedings.some(lc => lc.id === rm.id)) {
-              feedings.push(rm);
+              feedings.push(rm); 
               addedTotal++;
             }
           });
@@ -683,7 +681,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isNaN(hNum) || hNum < 1 || hNum > TOTAL_HIVES || !rm.id) return;
             rm.hiveNum = hNum;
             if (!treatments.some(lc => lc.id === rm.id)) {
-              treatments.push(rm);
+              treatments.push(rm); 
               addedTotal++;
             }
           });
@@ -691,7 +689,6 @@ document.addEventListener('DOMContentLoaded', () => {
           Store.set(KEYS.TREATMENTS, treatments);
         }
 
-        // Odświeżenie widoków tabel
         renderSheetTable();
         renderFeedingsTable();
         renderTabFeedingTable();
