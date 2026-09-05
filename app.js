@@ -1,13 +1,13 @@
 /**
  * ZOPTYMALIZOWANA LOGIKA APLIKACJI ASYSTENT PASIEKA WLKP - 18 ULI (APLIK PASIEKA)
- * Wersja produkcyjna z rygorystyczną walidacją danych, obsługą offline/online,
- * stabilną synchronizacją dwukierunkową oraz zabezpieczeniem przed pustymi/błędnymi wpisami.
+ * Pełna synchronizacja dwukierunkowa dla Przeglądów, Karmienia i Leczenia
+ * z rygorystyczną walidacją numerów uli (1-18) i unormowaną obsługą błędów.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
   const TOTAL_HIVES = 18;
   
-  // STAŁA WARTOŚĆ DOMYŚLNA WEBHOOKA (Gwarancja połączenia na telefonie i komputerze)
+  // STAŁA WARTOŚĆ DOMYŚLNA WEBHOOKA
   const DEFAULT_WEBHOOK = 'https://script.google.com/macros/s/AKfycbyQQL4WLtFXlgo0nuvtGSzWxvoxfqbA0sK0zf_Hh7bflcwsNxZ9UM73leN_kEHWc0yNtw/exec';
 
   const KEYS = {
@@ -138,7 +138,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       fetchFromGoogleSheets()
         .then(addedCount => {
-          alert(`Synchronizacja zakończona sukcesem!\n• Pobrano brakujących wpisów: ${addedCount}`);
+          alert(`Synchronizacja zakończona sukcesem!\n• Pobrano nowych wpisów: ${addedCount}`);
           speakText('Pomyślnie zsynchronizowano dane z Google Sheets.');
         })
         .catch(err => {
@@ -172,6 +172,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const cardBtn = e.target.closest('button[data-hive]');
     if (cardBtn) {
+      e.stopPropagation();
       const hId = parseInt(cardBtn.dataset.hive);
       if (cardBtn.classList.contains('btn-add-inspection')) openInspectionForHive(hId);
       if (cardBtn.classList.contains('btn-add-feeding')) openFeedingForHive(hId);
@@ -186,6 +187,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     const actionBtn = e.target.closest('button[data-id]');
     if (actionBtn) {
+      e.stopPropagation();
       const id = actionBtn.dataset.id;
       if (actionBtn.classList.contains('btn-delete-row') || actionBtn.classList.contains('btn-delete-inspection')) {
         if (confirm('Usunąć wpis przeglądu?')) deleteRecord('inspections', id);
@@ -636,32 +638,68 @@ document.addEventListener('DOMContentLoaded', () => {
     }).catch(console.error);
   }
 
+  // W PEŁNI ZSYNCHRONIZOWANE POBIERANIE WSZYSTKICH 3 ZAKŁADEK Z ARKUSZA
   function fetchFromGoogleSheets() {
     const url = getWebhookUrl();
     if (!url) return Promise.reject();
     return fetch(url).then(r => r.json()).then(remote => {
-      let added = 0;
-      if (Array.isArray(remote)) {
-        remote.forEach(rm => {
-          const hNum = parseInt(rm.hiveNum);
-          const hasValidDate = rm.timestamp && !isNaN(new Date(rm.timestamp).getTime());
-          const hasValidId = rm.id && String(rm.id).trim() !== '';
-
-          if (hasValidId && hNum >= 1 && hNum <= TOTAL_HIVES && hasValidDate) {
+      let addedTotal = 0;
+      if (remote && typeof remote === 'object') {
+        
+        // 1. Przeglądy
+        if (Array.isArray(remote.inspections)) {
+          remote.inspections.forEach(rm => {
+            const hNum = parseInt(rm.hiveNum, 10);
+            if (isNaN(hNum) || hNum < 1 || hNum > TOTAL_HIVES || !rm.id) return;
+            rm.hiveNum = hNum;
             if (!inspections.some(lc => lc.id === rm.id)) {
-              inspections.push(rm); 
-              added++;
+              inspections.push(rm);
+              addedTotal++;
             }
-          }
-        });
-        if (added > 0) {
+          });
           inspections.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-          Store.set(KEYS.INSPECTIONS, inspections); 
-          renderSheetTable(); 
-          renderHivesGrid();
+          Store.set(KEYS.INSPECTIONS, inspections);
         }
+
+        // 2. Karmienie
+        if (Array.isArray(remote.feedings)) {
+          remote.feedings.forEach(rm => {
+            const hNum = parseInt(rm.hiveNum, 10);
+            if (isNaN(hNum) || hNum < 1 || hNum > TOTAL_HIVES || !rm.id) return;
+            rm.hiveNum = hNum;
+            if (!feedings.some(lc => lc.id === rm.id)) {
+              feedings.push(rm);
+              addedTotal++;
+            }
+          });
+          feedings.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+          Store.set(KEYS.FEEDINGS, feedings);
+        }
+
+        // 3. Leczenie
+        if (Array.isArray(remote.treatments)) {
+          remote.treatments.forEach(rm => {
+            const hNum = parseInt(rm.hiveNum, 10);
+            if (isNaN(hNum) || hNum < 1 || hNum > TOTAL_HIVES || !rm.id) return;
+            rm.hiveNum = hNum;
+            if (!treatments.some(lc => lc.id === rm.id)) {
+              treatments.push(rm);
+              addedTotal++;
+            }
+          });
+          treatments.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+          Store.set(KEYS.TREATMENTS, treatments);
+        }
+
+        // Odświeżenie widoków tabel
+        renderSheetTable();
+        renderFeedingsTable();
+        renderTabFeedingTable();
+        renderTreatmentsTable();
+        renderTabTreatmentTable();
+        renderHivesGrid();
       }
-      return added;
+      return addedTotal;
     });
   }
 
@@ -709,7 +747,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     DOM.modalContent.innerHTML = html;
-    DOM.modal.classList.add('hidden');
     DOM.modal.classList.remove('hidden');
   }
 
