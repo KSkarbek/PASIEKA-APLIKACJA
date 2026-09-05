@@ -1,13 +1,13 @@
 /**
  * ZOPTYMALIZOWANA LOGIKA APLIKACJI ASYSTENT PASIEKA WLKP - 18 ULI (APLIK PASIEKA)
- * Kompletny moduł z obsługą kart, natywną wysyłką mobilną (sendBeacon), stałą
- * synchronizacją oraz ścisłą walidacją odrzucającą uszkodzone/puste wiersze z arkusza.
+ * Kompletny moduł obsługujący multi-tab (Przeglądy, Karmienie, Leczenie), natywną
+ * wysyłkę mobilną (sendBeacon), stałą synchronizację oraz usuwanie rekordów w arkuszu.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
   const TOTAL_HIVES = 18;
   
-  // STAŁA WARTOŚĆ DOMYŚLNA WEBHOOKA (Zabezpieczenie przed czyszczeniem localStorage)
+  // STAŁA WARTOŚĆ DOMYŚLNA WEBHOOKA (Zabezpieczenie przed czyszczeniem localStorage na telefonie)
   const DEFAULT_WEBHOOK = 'https://script.google.com/macros/s/AKfycbyQQL4WLtFXlgo0nuvtGSzWxvoxfqbA0sK0zf_Hh7bflcwsNxZ9UM73leN_kEHWc0yNtw/exec';
 
   const KEYS = {
@@ -109,6 +109,10 @@ document.addEventListener('DOMContentLoaded', () => {
   
   renderHivesGrid();
   renderSheetTable();
+  renderFeedingsTable();
+  renderTabFeedingTable();
+  renderTreatmentsTable();
+  renderTabTreatmentTable();
   initVoiceRecognition();
 
   if (DOM.webhook) {
@@ -687,7 +691,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (n !== null) { hiveQueens[id] = n.trim(); Store.set(KEYS.QUEENS, hiveQueens); renderHivesGrid(); renderSheetTable(); }
   }
 
-  // === INTEGRACJA GOOGLE SHEETS (Z RYGORYSTYCZNĄ WALIDACJĄ) ===
+  // === INTEGRACJA GOOGLE SHEETS (HYBRYDA MULTI-TAB) ===
   function saveLocalRecordState(type) {
     if (type === 'inspection') Store.set(KEYS.INSPECTIONS, inspections);
     if (type === 'feeding') Store.set(KEYS.FEEDINGS, feedings);
@@ -733,29 +737,63 @@ document.addEventListener('DOMContentLoaded', () => {
     const url = getWebhookUrl();
     if (!url) return Promise.reject();
     return fetch(url).then(r => r.json()).then(remote => {
-      let added = 0;
-      if (Array.isArray(remote)) {
-        remote.forEach(rm => {
-          // Walidacja: sprawdzenie czy rekord posiada id, poprawną datę oraz czy hiveNum mieści się w zakresie 1-18
-          const hNum = parseInt(rm.hiveNum, 10);
-          if (isNaN(hNum) || hNum < 1 || hNum > TOTAL_HIVES || !rm.id || !rm.timestamp || String(rm.timestamp).includes('Invalid')) {
-            return; // Odrzuca uszkodzone, puste lub śmieciowe wiersze
-          }
-          rm.hiveNum = hNum;
-
-          if (!inspections.some(lc => lc.id === rm.id || (lc.hiveNum === rm.hiveNum && new Date(lc.timestamp).getTime() === new Date(rm.timestamp).getTime()))) {
-            inspections.push(rm); 
-            added++;
-          }
-        });
-        if (added > 0) {
+      let addedTotal = 0;
+      
+      if (remote && typeof remote === 'object') {
+        // 1. Przeglądy
+        if (Array.isArray(remote.inspections)) {
+          remote.inspections.forEach(rm => {
+            const hNum = parseInt(rm.hiveNum, 10);
+            if (isNaN(hNum) || hNum < 1 || hNum > TOTAL_HIVES || !rm.id) return;
+            rm.hiveNum = hNum;
+            if (!inspections.some(lc => lc.id === rm.id)) {
+              inspections.push(rm);
+              addedTotal++;
+            }
+          });
           inspections.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-          Store.set(KEYS.INSPECTIONS, inspections); 
-          renderSheetTable(); 
-          renderHivesGrid();
+          Store.set(KEYS.INSPECTIONS, inspections);
         }
+
+        // 2. Karmienie
+        if (Array.isArray(remote.feedings)) {
+          remote.feedings.forEach(rm => {
+            const hNum = parseInt(rm.hiveNum, 10);
+            if (isNaN(hNum) || hNum < 1 || hNum > TOTAL_HIVES || !rm.id) return;
+            rm.hiveNum = hNum;
+            if (!feedings.some(lc => lc.id === rm.id)) {
+              feedings.push(rm);
+              addedTotal++;
+            }
+          });
+          feedings.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+          Store.set(KEYS.FEEDINGS, feedings);
+        }
+
+        // 3. Leczenie
+        if (Array.isArray(remote.treatments)) {
+          remote.treatments.forEach(rm => {
+            const hNum = parseInt(rm.hiveNum, 10);
+            if (isNaN(hNum) || hNum < 1 || hNum > TOTAL_HIVES || !rm.id) return;
+            rm.hiveNum = hNum;
+            if (!treatments.some(lc => lc.id === rm.id)) {
+              treatments.push(rm);
+              addedTotal++;
+            }
+          });
+          treatments.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+          Store.set(KEYS.TREATMENTS, treatments);
+        }
+
+        // Odświeżenie widoków tabel i kafelków
+        renderSheetTable();
+        renderFeedingsTable();
+        renderTabFeedingTable();
+        renderTreatmentsTable();
+        renderTabTreatmentTable();
+        renderHivesGrid();
       }
-      return added;
+      return addedTotal;
     });
   }
 
