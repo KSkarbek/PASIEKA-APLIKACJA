@@ -1,13 +1,13 @@
 /**
  * ZOPTYMALIZOWANA LOGIKA APLIKACJI ASYSTENT PASIEKA WLKP - 18 ULI (APLIK PASIEKA)
- * Kompletny moduł z obsługą kart, natywną wysyłką mobilną (sendBeacon), stałą
- * synchronizacją oraz ścisłą walidacją odrzucającą uszkodzone/puste wiersze z arkusza.
+ * Kompletny moduł z obsługą kart: Przeglądy, Karmienie, Leczenie, natywną wysyłką mobilną (sendBeacon),
+ * stasłą synchronizacją oraz usuwaniem rekordów bezpośrednio z Google Sheets.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
   const TOTAL_HIVES = 18;
   
-  // STAŁA WARTOŚĆ DOMYŚLNA WEBHOOKA (Zabezpieczenie przed czyszczeniem localStorage)
+  // STAŁA WARTOŚĆ DOMYŚLNA WEBHOOKA (Zabezpieczenie przed czyszczeniem localStorage na telefonie)
   const DEFAULT_WEBHOOK = 'https://script.google.com/macros/s/AKfycbyQQL4WLtFXlgo0nuvtGSzWxvoxfqbA0sK0zf_Hh7bflcwsNxZ9UM73leN_kEHWc0yNtw/exec';
 
   const KEYS = {
@@ -49,7 +49,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const escapeHtml = str => String(str || '').replace(/[&<>"']/g, m => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'}[m]));
   const formatPL = dStr => {
     const d = new Date(dStr);
-    if (isNaN(d.getTime())) return 'Brak daty';
     return `${d.toLocaleDateString('pl-PL')} ${d.toLocaleTimeString('pl-PL', {hour:'2-digit', minute:'2-digit'})}`;
   };
   const getDatetimeLocal = (d = new Date()) => {
@@ -552,8 +551,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function deleteRecord(type, id) {
+    // 1. Wysyłka sygnału usunięcia do Google Sheets
     deleteFromGoogleSheets(type, id);
 
+    // 2. Usunięcie wpisu z pamięci przeglądarki
     if (type === 'inspections') { 
       inspections = inspections.filter(x => x.id !== id); 
       Store.set(KEYS.INSPECTIONS, inspections); 
@@ -687,7 +688,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (n !== null) { hiveQueens[id] = n.trim(); Store.set(KEYS.QUEENS, hiveQueens); renderHivesGrid(); renderSheetTable(); }
   }
 
-  // === INTEGRACJA GOOGLE SHEETS (Z RYGORYSTYCZNĄ WALIDACJĄ) ===
+  // === INTEGRACJA GOOGLE SHEETS (HYBRYDA MOBILNA SENDBEACON + FETCH) ===
   function saveLocalRecordState(type) {
     if (type === 'inspection') Store.set(KEYS.INSPECTIONS, inspections);
     if (type === 'feeding') Store.set(KEYS.FEEDINGS, feedings);
@@ -705,6 +706,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     const payloadStr = JSON.stringify(payloadObj);
 
+    // 1. Natywny interfejs sendBeacon dla sieci mobilnych (omija bloki 302/CORS)
     if (navigator.sendBeacon) {
       const blob = new Blob([payloadStr], { type: 'text/plain;charset=UTF-8' });
       const sent = navigator.sendBeacon(url, blob);
@@ -715,6 +717,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
+    // 2. Fallback Fetch API
     fetch(url, {
       method: 'POST',
       mode: 'no-cors',
@@ -736,23 +739,13 @@ document.addEventListener('DOMContentLoaded', () => {
       let added = 0;
       if (Array.isArray(remote)) {
         remote.forEach(rm => {
-          // Walidacja: sprawdzenie czy rekord posiada id, poprawną datę oraz czy hiveNum mieści się w zakresie 1-18
-          const hNum = parseInt(rm.hiveNum, 10);
-          if (isNaN(hNum) || hNum < 1 || hNum > TOTAL_HIVES || !rm.id || !rm.timestamp || String(rm.timestamp).includes('Invalid')) {
-            return; // Odrzuca uszkodzone, puste lub śmieciowe wiersze
-          }
-          rm.hiveNum = hNum;
-
-          if (!inspections.some(lc => lc.id === rm.id || (lc.hiveNum === rm.hiveNum && new Date(lc.timestamp).getTime() === new Date(rm.timestamp).getTime()))) {
-            inspections.push(rm); 
-            added++;
+          if (!inspections.some(lc => lc.hiveNum === rm.hiveNum && new Date(lc.timestamp).getTime() === new Date(rm.timestamp).getTime())) {
+            inspections.push(rm); added++;
           }
         });
         if (added > 0) {
           inspections.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-          Store.set(KEYS.INSPECTIONS, inspections); 
-          renderSheetTable(); 
-          renderHivesGrid();
+          Store.set(KEYS.INSPECTIONS, inspections); renderSheetTable(); renderHivesGrid();
         }
       }
       return added;
