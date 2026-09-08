@@ -78,6 +78,11 @@ document.addEventListener('DOMContentLoaded', () => {
     sheetTbody: qsid('sheet-tbody'), mainFeedTbody: qsid('feedings-tbody'),
     mainTreatTbody: qsid('treatments-tbody'), filterHive: qsid('filter-hive-select'),
     
+    // Nowe referencje do historii lokalnej pod formularzami
+    localInspHist: qsid('local-inspection-history'),
+    localFeedHist: qsid('local-feeding-history'),
+    localTreatHist: qsid('local-treatment-history'),
+    
     webhook: qsid('input-gsheet-webhook'),
     btnSaveWebhook: qsid('btn-save-webhook'),
     btnShowGsheetScript: qsid('btn-show-gsheet-script'),
@@ -99,7 +104,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (DOM.webhook) {
       let savedUrl = localStorage.getItem(KEYS.WEBHOOK);
-      // Fallback: jeśli localStorage jest puste, a mamy coś wpisane w pliku:
       if (!savedUrl && DEFAULT_WEBHOOK !== 'TUTAJ_WKLEJ_TWOJ_ADRES_URL_WEBHOOKA') {
           savedUrl = DEFAULT_WEBHOOK;
       }
@@ -210,9 +214,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  if (DOM.selHive) DOM.selHive.addEventListener('change', e => qsid('form-hive-title').textContent = `Przegląd: ${getHiveName(e.target.value)}`);
-  if (DOM.selFeedHive) DOM.selFeedHive.addEventListener('change', e => qsid('form-feeding-title').textContent = `🍯 Karmienie: ${getHiveName(e.target.value)}`);
-  if (DOM.selTreatHive) DOM.selTreatHive.addEventListener('change', e => qsid('form-treatment-title').textContent = `💉 Leczenie: ${getHiveName(e.target.value)}`);
+  // Odświeżanie lokalnej historii przy zmianie ula z poziomu selecta
+  if (DOM.selHive) DOM.selHive.addEventListener('change', e => {
+    qsid('form-hive-title').textContent = `Przegląd: ${getHiveName(e.target.value)}`;
+    renderLocalHistory(e.target.value);
+  });
+  if (DOM.selFeedHive) DOM.selFeedHive.addEventListener('change', e => {
+    qsid('form-feeding-title').textContent = `🍯 Karmienie: ${getHiveName(e.target.value)}`;
+    renderLocalHistory(e.target.value);
+  });
+  if (DOM.selTreatHive) DOM.selTreatHive.addEventListener('change', e => {
+    qsid('form-treatment-title').textContent = `💉 Leczenie: ${getHiveName(e.target.value)}`;
+    renderLocalHistory(e.target.value);
+  });
   
   if (DOM.filterHive) DOM.filterHive.addEventListener('change', () => { renderSheetTable(); renderFeedingsTable(); renderTreatmentsTable(); });
 
@@ -236,7 +250,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (view === 'treat') renderTreatmentsTable();
   }
 
-  // --- SUBMITY (Z ZABEZPIECZENIEM PRZED WIELOKROKTYN KLIKNIĘCIEM) ---
+  // --- SUBMITY ---
   if (DOM.inspForm) {
     DOM.inspForm.addEventListener('submit', e => {
       e.preventDefault();
@@ -485,12 +499,48 @@ document.addEventListener('DOMContentLoaded', () => {
     </td>
   `;
 
+  // --- FUNKCJA RENDERUJĄCA HISTORIĘ BEZPOŚREDNIO POD FORMULARZAMI ---
+  function renderLocalHistory(hiveNum) {
+    const hId = parseInt(hiveNum);
+    
+    const hiveInsp = inspections.filter(item => item.hiveNum === hId);
+    let htmlInsp = '';
+    if (!hiveInsp.length) htmlInsp = '<p style="color:#6b7280; font-size:0.9rem; padding:8px;">Brak wpisów.</p>';
+    else hiveInsp.forEach(item => {
+      htmlInsp += `<div style="background:var(--bg-color); border:1px solid var(--border-color); padding:8px; border-radius:6px; margin-bottom:6px; font-size:0.85rem;">
+        <div><strong>📅 ${formatPL(item.timestamp)}</strong> — ${escapeHtml(item.dzialania)}</div>
+      </div>`;
+    });
+    if(DOM.localInspHist) DOM.localInspHist.innerHTML = htmlInsp;
+
+    const hiveFeed = feedings.filter(item => item.hiveNum === hId);
+    let htmlFeed = '';
+    if (!hiveFeed.length) htmlFeed = '<p style="color:#6b7280; font-size:0.9rem; padding:8px;">Brak wpisów.</p>';
+    else hiveFeed.forEach(item => {
+      htmlFeed += `<div style="background:#fffbf0; border:1px solid #fde68a; padding:8px; border-radius:6px; margin-bottom:6px; font-size:0.85rem;">
+        <div><strong>📅 ${formatPL(item.timestamp)}</strong> — <strong style="color:#b45309;">${item.kgCukru} kg</strong> (${escapeHtml(item.uwagi)})</div>
+      </div>`;
+    });
+    if(DOM.localFeedHist) DOM.localFeedHist.innerHTML = htmlFeed;
+
+    const hiveTreat = treatments.filter(item => item.hiveNum === hId);
+    let htmlTreat = '';
+    if (!hiveTreat.length) htmlTreat = '<p style="color:#6b7280; font-size:0.9rem; padding:8px;">Brak wpisów.</p>';
+    else hiveTreat.forEach(item => {
+      htmlTreat += `<div style="background:#fef2f2; border:1px solid #fca5a5; padding:8px; border-radius:6px; margin-bottom:6px; font-size:0.85rem;">
+        <div><strong>📅 ${formatPL(item.timestamp)}</strong> — <strong style="color:#991b1b;">${escapeHtml(item.preparat)}</strong> (${escapeHtml(item.uwagi)})</div>
+      </div>`;
+    });
+    if(DOM.localTreatHist) DOM.localTreatHist.innerHTML = htmlTreat;
+  }
+
   function deleteRecord(type, id) {
     deleteFromGoogleSheets(type, id);
     if (type === 'inspections') { inspections = inspections.filter(x => x.id !== id); Store.set(KEYS.INSPECTIONS, inspections); renderSheetTable(); }
     if (type === 'feedings') { feedings = feedings.filter(x => x.id !== id); Store.set(KEYS.FEEDINGS, feedings); renderFeedingsTable(); }
     if (type === 'treatments') { treatments = treatments.filter(x => x.id !== id); Store.set(KEYS.TREATMENTS, treatments); renderTreatmentsTable(); }
     renderHivesGrid();
+    renderLocalHistory(DOM.selHive.value || 1); // Odświeża lokalną historię po usunięciu
   }
 
   function deleteFromGoogleSheets(type, id) {
@@ -509,6 +559,7 @@ document.addEventListener('DOMContentLoaded', () => {
     qsid('form-hive-title').textContent = `Przegląd: ${getHiveName(hId)}`;
     DOM.dateInsp.value = getDatetimeLocal();
     editingInspectionId = null;
+    renderLocalHistory(hId);
     switchTab('tab-inspection');
   }
 
@@ -517,6 +568,7 @@ document.addEventListener('DOMContentLoaded', () => {
     qsid('form-feeding-title').textContent = `🍯 Karmienie: ${getHiveName(hId)}`;
     DOM.dateFeed.value = getDatetimeLocal();
     editingFeedingId = null;
+    renderLocalHistory(hId);
     switchTab('tab-feeding');
   }
 
@@ -525,6 +577,7 @@ document.addEventListener('DOMContentLoaded', () => {
     qsid('form-treatment-title').textContent = `💉 Leczenie: ${getHiveName(hId)}`;
     DOM.dateTreat.value = getDatetimeLocal();
     editingTreatmentId = null;
+    renderLocalHistory(hId);
     switchTab('tab-treatment');
   }
 
@@ -536,6 +589,7 @@ document.addEventListener('DOMContentLoaded', () => {
     DOM.dateInsp.value = getDatetimeLocal(new Date(item.timestamp));
     DOM.dzialania.value = item.dzialania || '';
     DOM.przyszle.value = item.przyszleDzialania || '';
+    renderLocalHistory(item.hiveNum);
     switchTab('tab-inspection');
   }
 
@@ -547,6 +601,7 @@ document.addEventListener('DOMContentLoaded', () => {
     DOM.dateFeed.value = getDatetimeLocal(new Date(item.timestamp));
     DOM.kgFeed.value = item.kgCukru || 3;
     DOM.notesFeed.value = item.uwagi || '';
+    renderLocalHistory(item.hiveNum);
     switchTab('tab-feeding');
   }
 
@@ -558,6 +613,7 @@ document.addEventListener('DOMContentLoaded', () => {
     DOM.dateTreat.value = getDatetimeLocal(new Date(item.timestamp));
     DOM.prepTreat.value = item.preparat || '';
     DOM.notesTreat.value = item.uwagi || '';
+    renderLocalHistory(item.hiveNum);
     switchTab('tab-treatment');
   }
 
@@ -611,14 +667,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // ROZBUDOWANA FUNKCJA ODCZYTU (Weryfikuje poprawność wierszy)
   function fetchFromGoogleSheets() {
     const url = getWebhookUrl();
     if (!url || url === 'TUTAJ_WKLEJ_TWOJ_ADRES_URL_WEBHOOKA') return Promise.reject();
     
     return fetch(url).then(r => r.json()).then(res => {
       let count = 0;
-      // Rygorystyczna walidacja ignorująca puste wiersze
       const isValid = (row) => row && row.id && String(row.id).trim() !== '' && row.hiveNum && parseInt(row.hiveNum) > 0;
 
       if (res && typeof res === 'object') {
@@ -641,11 +695,11 @@ document.addEventListener('DOMContentLoaded', () => {
           Store.set(KEYS.TREATMENTS, treatments);
         }
         
-        // Odświeżenie wszystkich sekcji wizualnych po zaciągnięciu nowych danych
         renderHivesGrid();
         renderSheetTable();
         renderFeedingsTable();
         renderTreatmentsTable();
+        renderLocalHistory(DOM.selHive ? DOM.selHive.value : 1);
       }
       return count;
     });
