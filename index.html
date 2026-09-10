@@ -45,6 +45,7 @@
     <button class="tab-btn active" data-tab="tab-dom">🏡 DOM (1-6)</button>
     <button class="tab-btn" data-tab="tab-zbior">🌾 ZBIÓR (7-12)</button>
     <button class="tab-btn" data-tab="tab-las">🌲 LAS (13-18)</button>
+    <button class="tab-btn" data-tab="tab-todo" style="background:#059669; color:#fff;">📋 ZROBIĆ</button>
     <button class="tab-btn" data-tab="tab-sheet">📊 Arkusz / Historia</button>
   </nav>
 
@@ -74,6 +75,18 @@
     </div>
     <div id="hives-grid-las" class="hives-grid hives-grid-las"></div>
   </section>
+  
+  <!-- ZAKŁADKA LISTY ZADAŃ (ZROBIĆ) -->
+  <section id="tab-todo" class="tab-content">
+    <div class="card">
+      <div class="card-header" style="background: #d1fae5; color: #065f46;">
+        <h2>📋 Planowane Zadania do Zrobienia</h2>
+      </div>
+      <ul id="todo-list" style="list-style: none; padding: 10px; margin: 0;">
+        <!-- Lista z JS -->
+      </ul>
+    </div>
+  </section>
 
   <!-- ZAKŁADKA 4: FORMULARZ PRZEGLĄDU -->
   <section id="tab-inspection" class="tab-content">
@@ -101,11 +114,12 @@
             <div class="radio-group">
               <label><input type="radio" name="matka" value="TAK" id="matka-tak" checked> 👑 TAK</label>
               <label><input type="radio" name="matka" value="NIE" id="matka-nie"> ❌ NIE</label>
+              <label><input type="radio" name="matka" value="NIE WIEM" id="matka-nw"> 🤷 NIE WIEM</label>
             </div>
           </div>
 
           <div class="form-group">
-            <label class="group-label">Jaja (Jednodniowe):</label>
+            <label class="group-label">Jaja/młody czerw:</label>
             <div class="radio-group">
               <label><input type="radio" name="jaja" value="TAK" id="jaja-tak" checked> 🥚 TAK</label>
               <label><input type="radio" name="jaja" value="NIE" id="jaja-nie"> ❌ NIE</label>
@@ -179,11 +193,8 @@
       </form>
     </div>
     
-    <!-- HISTORIA PRZEGLĄDÓW TEGO ULA -->
     <div class="card margin-top-md">
-      <div class="card-header">
-        <h3>📋 Ostatnie przeglądy tego ula</h3>
-      </div>
+      <div class="card-header"><h3>📋 Ostatnie przeglądy tego ula</h3></div>
       <div id="local-inspection-history" style="padding: 8px;">Brak wpisów...</div>
     </div>
   </section>
@@ -228,11 +239,8 @@
       </form>
     </div>
 
-    <!-- HISTORIA KARMIENIA TEGO ULA -->
     <div class="card margin-top-md">
-      <div class="card-header" style="background: #fef3c7; color: #92400e;">
-        <h3>🍯 Historia karmienia tego ula</h3>
-      </div>
+      <div class="card-header" style="background: #fef3c7; color: #92400e;"><h3>🍯 Historia karmienia tego ula</h3></div>
       <div id="local-feeding-history" style="padding: 8px;">Brak wpisów...</div>
     </div>
   </section>
@@ -273,16 +281,61 @@
       </form>
     </div>
 
-    <!-- HISTORIA LECZENIA TEGO ULA -->
     <div class="card margin-top-md">
-      <div class="card-header" style="background: #fee2e2; color: #991b1b;">
-        <h3>💉 Historia leczenia tego ula</h3>
-      </div>
+      <div class="card-header" style="background: #fee2e2; color: #991b1b;"><h3>💉 Historia leczenia tego ula</h3></div>
       <div id="local-treatment-history" style="padding: 8px;">Brak wpisów...</div>
     </div>
   </section>
 
-  <!-- ZAKŁADKA 7: ARKUSZ / HISTORIA / ZBIEG AKCJI -->
+  <!-- ZAKŁADKA NOWA: FORMULARZ IZO -->
+  <section id="tab-izo" class="tab-content">
+    <div class="card form-card">
+      <div class="card-header" style="background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%); color: #3730a3;">
+        <h2 id="form-izo-title">🗃️ Izolator Ula № 1</h2>
+        <span class="hive-type-badge" style="background:#4f46e5; color:#ffffff;">IZO</span>
+      </div>
+
+      <form id="izo-form">
+        <div class="form-row flex-row">
+          <div class="form-group flex-1">
+            <label for="select-izo-hive">Wybierz Ul:</label>
+            <select id="select-izo-hive" class="input-control select-lg" required></select>
+          </div>
+          <div class="form-group flex-1">
+            <label for="input-izo-date">Data i Godzina:</label>
+            <input type="datetime-local" id="input-izo-date" class="input-control" required>
+          </div>
+        </div>
+
+        <div class="form-group margin-top-md">
+          <label class="group-label">Rodzaj operacji (IZO):</label>
+          <div class="radio-group">
+            <label><input type="radio" name="izoType" value="IZO-pocz" checked> 📥 IZO-pocz</label>
+            <label><input type="radio" name="izoType" value="IZO-koniec"> 📤 IZO-koniec</label>
+          </div>
+        </div>
+
+        <div class="form-group margin-top-md">
+          <label for="input-izo-ramka">Po której ramce:</label>
+          <input type="number" id="input-izo-ramka" class="input-control" min="1" max="25" placeholder="np. 4" required>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn-primary btn-xl" style="background:#4f46e5; border-color:#3730a3;">💾 Zapisz IZO</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- EDYTOWALNA HISTORIA IZO POD FORMULARZEM -->
+    <div class="card margin-top-md">
+      <div class="card-header" style="background: #e0e7ff; color: #3730a3;">
+        <h3>🗃️ Historia IZO tego ula</h3>
+      </div>
+      <div id="local-izo-history" style="padding: 8px;">Brak wpisów...</div>
+    </div>
+  </section>
+
+  <!-- ZAKŁADKA 7: ARKUSZ / HISTORIA -->
   <section id="tab-sheet" class="tab-content">
     <div class="card sheet-card">
       <div class="sheet-toolbar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
@@ -292,20 +345,21 @@
         </div>
         <div class="sheet-actions" style="display:flex; gap:8px; flex-wrap:wrap;">
           <a href="https://docs.google.com/spreadsheets/u/0/" target="_blank" class="btn-gsheet" style="padding: 10px 14px; text-decoration:none;">
-            🟢 Otwórz plik APLIK PASIEKA
+            🟢 Otwórz plik
           </a>
           <button id="btn-sync-now" class="btn-primary" style="padding: 10px 14px; font-size: 0.9rem;">
-            🔄 Synchronizuj z Google Sheets
+            🔄 Synchronizuj z Sheets
           </button>
         </div>
       </div>
 
-      <!-- PRZEŁĄCZNIKI HISTORII I FILTR ULA -->
+      <!-- PRZEŁĄCZNIKI HISTORII -->
       <div class="tab-toggle-bar margin-top-md" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
         <div style="display:flex; gap:6px;">
           <button id="btn-view-inspections" class="btn-tab-toggle active">📋 Przeglądy</button>
           <button id="btn-view-feedings" class="btn-tab-toggle">🍯 Karmienie</button>
           <button id="btn-view-treatments" class="btn-tab-toggle">💉 Leczenie</button>
+          <button id="btn-view-izos" class="btn-tab-toggle">🗃️ IZO</button>
         </div>
         <div>
           <label for="filter-hive-select" style="font-weight:600; font-size:0.9rem; margin-right:6px;">Wybierz ul:</label>
@@ -332,10 +386,9 @@
             <tr>
               <th>Data i Czas</th>
               <th>Ul</th>
-              <th>Nazwa Ula</th>
+              <th>Nazwa</th>
               <th>Rodzina</th>
               <th>Matka</th>
-              <th>Info Matka</th>
               <th>Jaja</th>
               <th>Czerw</th>
               <th>Pokarm</th>
@@ -357,7 +410,7 @@
             <tr>
               <th>Data</th>
               <th>Ul</th>
-              <th>Nazwa Ula</th>
+              <th>Nazwa</th>
               <th>Ilość Cukru</th>
               <th>Uwagi</th>
               <th>Akcje</th>
@@ -374,13 +427,30 @@
             <tr>
               <th>Data</th>
               <th>Ul</th>
-              <th>Nazwa Ula</th>
+              <th>Nazwa</th>
               <th>Preparat</th>
               <th>Uwagi</th>
               <th>Akcje</th>
             </tr>
           </thead>
           <tbody id="treatments-tbody"></tbody>
+        </table>
+      </div>
+
+      <!-- TABELA IZO -->
+      <div id="wrapper-izos-table" class="table-wrapper margin-top-md hidden">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Ul</th>
+              <th>Nazwa</th>
+              <th>Operacja</th>
+              <th>Ramka</th>
+              <th>Akcje</th>
+            </tr>
+          </thead>
+          <tbody id="izos-tbody"></tbody>
         </table>
       </div>
     </div>
