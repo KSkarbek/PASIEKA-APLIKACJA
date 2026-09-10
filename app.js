@@ -5,7 +5,7 @@
 document.addEventListener('DOMContentLoaded', () => {
   const TOTAL_HIVES = 18;
   
-  const DEFAULT_WEBHOOK = 'TUTAJ_WKLEJ_TWOJ_ADRES_URL_WEBHOOKA'; 
+  const DEFAULT_WEBHOOK = 'https://script.google.com/macros/s/AKfycbx2PUdp6AyROHIr97rmxa_pCVJmKHXrgYseOZBRoVkQnmKiVU_l_-jSP2Ux_gAA7gNfuA/exec'; 
 
   const KEYS = {
     INSPECTIONS: 'pasieka_wlkp_inspections_v2',
