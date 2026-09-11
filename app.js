@@ -10,7 +10,7 @@ function getWebhookUrl() {
   return localStorage.getItem('gsheet_webhook') || DEFAULT_WEBHOOK;
 }
 
-// Zabezpieczenie danych – ignoruje zepsute lub puste wiersze
+// Zabezpieczenie danych – ignoruje zepsute lub puste wiersze[cite: 2]
 const isValid = (row) => row && row.id && String(row.id).trim() !== '' && row.hiveNum && parseInt(row.hiveNum) > 0;
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -78,16 +78,15 @@ function openForm(type, hiveNum) {
   document.getElementById(`select-${type === 'inspection' ? '' : type + '-'}hive`).innerHTML = `<option value="${hiveNum}">${hiveNum}</option>`;
   document.getElementById(`input-${type === 'inspection' ? '' : type + '-'}date`).value = nowStr;
   
-  // Wyczyść ewentualny stan edycji
+  // Wyczyść ewentualny znacznik edycji
   const form = document.getElementById(`${type}-form`);
   delete form.dataset.editId;
   const btn = document.getElementById(`btn-submit-${type}`);
-  if(btn) btn.innerHTML = btn.innerHTML.replace('ZAKTUaLIZUJ', 'ZAPISZ'); 
+  if(btn) btn.innerHTML = btn.innerHTML.replace('ZAKTUALIZUJ', 'ZAPISZ'); 
 
   renderLocalHistory(type, hiveNum);
 }
 
-// FORMATOWANIE DATY
 function fd(d) {
   if (!d) return '';
   return new Date(d).toLocaleString('pl-PL', {dateStyle: 'short', timeStyle: 'short'});
@@ -104,25 +103,37 @@ function renderGlobalTables() {
     <tr>
       <td>${fd(r.timestamp)}</td><td><b>${r.hiveNum}</b></td><td>${r.rodzina}</td><td>${r.matka}</td><td>${r.jaja}</td>
       <td>${r.ramkiCzerwiu}</td><td>${r.pokarm}</td><td>${r.polkorpus}</td><td>${r.dzialania}</td><td>${r.przyszleDzialania}</td>
-      <td><button onclick="editRecord('${r.id}', 'inspection')" class="btn-small">✏️</button> <button onclick="deleteRecord('${r.id}', 'inspection')" class="btn-small" style="background:red; color:white;">🗑️</button></td>
+      <td>
+        <button onclick="editRecord('${r.id}', 'inspection')" class="btn-small">✏️</button>
+        <button onclick="deleteRecord('${r.id}', 'inspection')" class="btn-small" style="background:red; color:white;">🗑️</button>
+      </td>
     </tr>`).join('');
 
   tbodyFeed.innerHTML = state.feedings.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).map(r => `
     <tr>
       <td>${fd(r.timestamp)}</td><td><b>${r.hiveNum}</b></td><td>${r.kgCukru} kg</td><td>${r.uwagi}</td>
-      <td><button onclick="editRecord('${r.id}', 'feeding')" class="btn-small">✏️</button> <button onclick="deleteRecord('${r.id}', 'feeding')" class="btn-small" style="background:red; color:white;">🗑️</button></td>
+      <td>
+        <button onclick="editRecord('${r.id}', 'feeding')" class="btn-small">✏️</button>
+        <button onclick="deleteRecord('${r.id}', 'feeding')" class="btn-small" style="background:red; color:white;">🗑️</button>
+      </td>
     </tr>`).join('');
 
   tbodyTreat.innerHTML = state.treatments.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).map(r => `
     <tr>
       <td>${fd(r.timestamp)}</td><td><b>${r.hiveNum}</b></td><td>${r.preparat}</td><td>${r.uwagi}</td>
-      <td><button onclick="editRecord('${r.id}', 'treatment')" class="btn-small">✏️</button> <button onclick="deleteRecord('${r.id}', 'treatment')" class="btn-small" style="background:red; color:white;">🗑️</button></td>
+      <td>
+        <button onclick="editRecord('${r.id}', 'treatment')" class="btn-small">✏️</button>
+        <button onclick="deleteRecord('${r.id}', 'treatment')" class="btn-small" style="background:red; color:white;">🗑️</button>
+      </td>
     </tr>`).join('');
 
   tbodyIzo.innerHTML = state.izos.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).map(r => `
     <tr>
       <td>${fd(r.timestamp)}</td><td><b>${r.hiveNum}</b></td><td>${r.izoType}</td><td>Ramka: ${r.ramka}</td>
-      <td><button onclick="editRecord('${r.id}', 'izo')" class="btn-small">✏️</button> <button onclick="deleteRecord('${r.id}', 'izo')" class="btn-small" style="background:red; color:white;">🗑️</button></td>
+      <td>
+        <button onclick="editRecord('${r.id}', 'izo')" class="btn-small">✏️</button>
+        <button onclick="deleteRecord('${r.id}', 'izo')" class="btn-small" style="background:red; color:white;">🗑️</button>
+      </td>
     </tr>`).join('');
 }
 
@@ -156,21 +167,37 @@ function renderLocalHistory(type, hiveNum) {
   }).join('');
 }
 
+// RENDEROWANIE ZAKŁADKI ZROBIĆ
 function renderTodos() {
   const ul = document.getElementById('todo-list');
   let todos = state.inspections.filter(i => i.przyszleDzialania && i.przyszleDzialania.trim() !== '').sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
   if(todos.length === 0) { ul.innerHTML = '<li>Brak zaplanowanych zadań.</li>'; return; }
-  ul.innerHTML = todos.map(t => `<li style="padding: 10px; border-bottom: 1px solid #e5e7eb;">
-    <b>Ul ${t.hiveNum}</b> (${fd(t.timestamp)}): ${t.przyszleDzialania}
-  </li>`).join('');
+  
+  ul.innerHTML = todos.map(t => {
+    const isDone = localStorage.getItem('todo_done_' + t.id) === 'true';
+    const checked = isDone ? 'checked' : '';
+    const strike = isDone ? 'text-decoration: line-through; color: #9ca3af;' : '';
+    
+    return `<li style="padding: 10px; border-bottom: 1px solid #e5e7eb; display:flex; align-items:center; gap:10px;">
+      <input type="checkbox" onchange="toggleTodo('${t.id}', this.checked)" ${checked} style="width:20px; height:20px;">
+      <div style="flex:1; ${strike}">
+        <b>${t.hiveNum}</b> (${fd(t.timestamp)}): ${t.przyszleDzialania}
+      </div>
+      <button onclick="editRecord('${t.id}', 'inspection')" class="btn-small">✏️</button>
+    </li>`;
+  }).join('');
 }
 
-// AKCJE KASOWANIA I EDYCJI Z APLIKACJI
+function toggleTodo(id, isDone) {
+  localStorage.setItem('todo_done_' + id, isDone);
+  renderTodos();
+}
+
+// AKCJE KASOWANIA I EDYCJI
 async function deleteRecord(id, type) {
   if(!confirm("Na pewno usunąć ten wpis?")) return;
-  const url = getWebhookUrl();
   try {
-    await fetch(url, { method: 'POST', body: JSON.stringify({ action: 'delete', type: type, id: id }) });
+    await fetch(getWebhookUrl(), { method: 'POST', body: JSON.stringify({ action: 'delete', type: type, id: id }) });
     alert("Wpis usunięto.");
     fetchFromGoogleSheets();
   } catch(e) { alert("Błąd usuwania!"); }
@@ -184,7 +211,7 @@ function editRecord(id, type) {
   const form = document.getElementById(`${type}-form`);
   form.dataset.editId = id; // ZNACZNIK EDYCJI
   const btn = document.getElementById(`btn-submit-${type}`);
-  btn.innerHTML = btn.innerHTML.replace('ZAPISZ', 'ZAKTUALIZUJ');
+  if(btn) btn.innerHTML = btn.innerHTML.replace('ZAPISZ', 'ZAKTUALIZUJ');
 
   const tzOffset = new Date().getTimezoneOffset() * 60000;
   const localISOTime = (new Date(new Date(record.timestamp) - tzOffset)).toISOString().slice(0, 16);
@@ -212,14 +239,13 @@ function editRecord(id, type) {
   }
 }
 
-// WYSYŁANIE DO GOOGLE SHEETS
 function initForms() {
   ['inspection', 'feeding', 'treatment', 'izo'].forEach(type => {
     document.getElementById(`${type}-form`).addEventListener('submit', async (e) => {
       e.preventDefault();
       const form = e.target;
       const btn = form.querySelector('button[type="submit"]');
-      btn.disabled = true; // Zabezpieczenie przed wieloklikiem
+      btn.disabled = true;
       setTimeout(() => btn.disabled = false, 2500);
 
       const isEdit = !!form.dataset.editId;
@@ -257,7 +283,7 @@ function initForms() {
         alert(isEdit ? "Zaktualizowano pomyślnie!" : "Zapisano pomyślnie!");
         form.reset();
         delete form.dataset.editId;
-        btn.innerHTML = btn.innerHTML.replace('ZAKTUALIZUJ', 'ZAPISZ');
+        if(btn) btn.innerHTML = btn.innerHTML.replace('ZAKTUALIZUJ', 'ZAPISZ');
         fetchFromGoogleSheets();
       } catch(e) { alert("Błąd zapisu!"); }
     });
