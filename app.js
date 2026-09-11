@@ -1,5 +1,5 @@
 /**
- * OSTATECZNA LOGIKA APLIKACJI ASYSTENT PASIEKA WLKP (Rozbudowana o IZO oraz listę zadań)
+ * OSTATECZNA LOGIKA APLIKACJI ASYSTENT PASIEKA WLKP
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -15,7 +15,8 @@ document.addEventListener('DOMContentLoaded', () => {
     NAMES: 'pasieka_wlkp_hive_names_v2',
     QUEENS: 'pasieka_wlkp_hive_queens_v2',
     THEME: 'pasieka_theme_mode',
-    WEBHOOK: 'pasieka_gsheet_webhook_v2'
+    WEBHOOK: 'pasieka_gsheet_webhook_v2',
+    TODO_DONE: 'pasieka_todo_done_v1'
   };
 
   function getWebhookUrl() {
@@ -31,6 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let feedings = Store.get(KEYS.FEEDINGS, []);
   let treatments = Store.get(KEYS.TREATMENTS, []);
   let izos = Store.get(KEYS.IZOS, []);
+  let doneTodos = Store.get(KEYS.TODO_DONE, []);
   
   let hiveNames = Store.get(KEYS.NAMES, {});
   let hiveQueens = Store.get(KEYS.QUEENS, {});
@@ -45,15 +47,28 @@ document.addEventListener('DOMContentLoaded', () => {
   let editingIzoId = null;
 
   const escapeHtml = str => String(str || '').replace(/[&<>"']/g, m => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'}[m]));
+  
+  // Bezpieczne parsowanie daty nawet z polskich stringów 
+  function parseDateSafe(dStr) {
+    if (!dStr) return 0;
+    const d = new Date(dStr);
+    if (!isNaN(d)) return d.getTime();
+    const parts = dStr.match(/\d+/g);
+    if (parts && parts.length >= 5) return new Date(parts[2], parts[1]-1, parts[0], parts[3], parts[4]).getTime();
+    return 0;
+  }
+
   const formatPL = dStr => {
     if (!dStr) return '';
     const d = new Date(dStr);
     return isNaN(d) ? dStr : `${d.toLocaleDateString('pl-PL')} ${d.toLocaleTimeString('pl-PL', {hour:'2-digit', minute:'2-digit'})}`;
   };
+  
   const getDatetimeLocal = (d = new Date()) => {
     const p = n => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
   };
+  
   const getHiveName = id => hiveNames[id] || `Ul № ${id}`;
   const getHiveCategory = id => id <= 6 ? 'dom' : (id <= 12 ? 'zbior' : 'las');
 
@@ -172,6 +187,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // --- OBSŁUGA CHECKBOXÓW ZROBIĆ ---
+  document.addEventListener('change', e => {
+    if (e.target.classList.contains('cb-todo-done')) {
+      const id = e.target.dataset.id;
+      if (e.target.checked) doneTodos.push(id);
+      else doneTodos = doneTodos.filter(x => x !== id);
+      Store.set(KEYS.TODO_DONE, doneTodos);
+      renderTodoList();
+    }
+  });
+
   document.addEventListener('click', e => {
     if(e.target.id === 'btn-ramki-minus' && !DOM.cbRamkiNw.checked) DOM.ramki.value = Math.max(0, (parseInt(DOM.ramki.value)||0)-1);
     if(e.target.id === 'btn-ramki-plus' && !DOM.cbRamkiNw.checked) DOM.ramki.value = Math.min(30, (parseInt(DOM.ramki.value)||0)+1);
@@ -209,6 +235,20 @@ document.addEventListener('DOMContentLoaded', () => {
       if (actionBtn.classList.contains('btn-edit-feeding-row')) { DOM.modal.classList.add('hidden'); openFeedingForEdit(id); }
       if (actionBtn.classList.contains('btn-edit-treatment-row')) { DOM.modal.classList.add('hidden'); openTreatmentForEdit(id); }
       if (actionBtn.classList.contains('btn-edit-izo-row')) { DOM.modal.classList.add('hidden'); openIzoForEdit(id); }
+      
+      // EDYCJA ZADAŃ ZROBIĆ
+      if (actionBtn.classList.contains('btn-edit-todo')) {
+        const item = inspections.find(i => i.id === id);
+        if (item) {
+          const newText = prompt('Edytuj zadanie:', item.przyszleDzialania);
+          if (newText !== null && newText.trim() !== '') {
+            item.przyszleDzialania = newText.trim();
+            Store.set(KEYS.INSPECTIONS, inspections);
+            sendToGoogleSheets(item, 'inspection', true);
+            renderTodoList(); renderSheetTable();
+          }
+        }
+      }
     }
   });
 
@@ -242,11 +282,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (DOM.wrapFeed) DOM.wrapFeed.classList.toggle('hidden', view !== 'feed');
     if (DOM.wrapTreat) DOM.wrapTreat.classList.toggle('hidden', view !== 'treat');
     if (DOM.wrapIzo) DOM.wrapIzo.classList.toggle('hidden', view !== 'izo');
-
-    if (view === 'insp') renderSheetTable();
-    if (view === 'feed') renderFeedingsTable();
-    if (view === 'treat') renderTreatmentsTable();
-    if (view === 'izo') renderIzosTable();
   }
 
   // --- SUBMITY ---
@@ -274,11 +309,14 @@ document.addEventListener('DOMContentLoaded', () => {
       if (editingInspectionId) {
         const idx = inspections.findIndex(i => i.id === editingInspectionId);
         if (idx > -1) inspections[idx] = payload;
+        sendToGoogleSheets(payload, 'inspection', true);
         editingInspectionId = null;
-      } else inspections.unshift(payload);
+      } else {
+        inspections.unshift(payload);
+        sendToGoogleSheets(payload, 'inspection', false);
+      }
 
       Store.set(KEYS.INSPECTIONS, inspections);
-      sendToGoogleSheets(payload, 'inspection');
       DOM.inspForm.reset();
       renderHivesGrid(); renderSheetTable();
       switchTab(`tab-${getHiveCategory(hId)}`);
@@ -303,11 +341,14 @@ document.addEventListener('DOMContentLoaded', () => {
       if (editingFeedingId) {
         const idx = feedings.findIndex(f => f.id === editingFeedingId);
         if (idx > -1) feedings[idx] = payload;
+        sendToGoogleSheets(payload, 'feeding', true);
         editingFeedingId = null;
-      } else feedings.unshift(payload);
+      } else {
+        feedings.unshift(payload);
+        sendToGoogleSheets(payload, 'feeding', false);
+      }
 
       Store.set(KEYS.FEEDINGS, feedings);
-      sendToGoogleSheets(payload, 'feeding');
       DOM.notesFeed.value = '';
       renderHivesGrid(); renderFeedingsTable();
       switchTab(`tab-${getHiveCategory(hId)}`);
@@ -331,11 +372,14 @@ document.addEventListener('DOMContentLoaded', () => {
       if (editingTreatmentId) {
         const idx = treatments.findIndex(t => t.id === editingTreatmentId);
         if (idx > -1) treatments[idx] = payload;
+        sendToGoogleSheets(payload, 'treatment', true);
         editingTreatmentId = null;
-      } else treatments.unshift(payload);
+      } else {
+        treatments.unshift(payload);
+        sendToGoogleSheets(payload, 'treatment', false);
+      }
 
       Store.set(KEYS.TREATMENTS, treatments);
-      sendToGoogleSheets(payload, 'treatment');
       DOM.prepTreat.value = ''; DOM.notesTreat.value = '';
       renderHivesGrid(); renderTreatmentsTable();
       switchTab(`tab-${getHiveCategory(hId)}`);
@@ -360,11 +404,14 @@ document.addEventListener('DOMContentLoaded', () => {
       if (editingIzoId) {
         const idx = izos.findIndex(t => t.id === editingIzoId);
         if (idx > -1) izos[idx] = payload;
+        sendToGoogleSheets(payload, 'izo', true);
         editingIzoId = null;
-      } else izos.unshift(payload);
+      } else {
+        izos.unshift(payload);
+        sendToGoogleSheets(payload, 'izo', false);
+      }
 
       Store.set(KEYS.IZOS, izos);
-      sendToGoogleSheets(payload, 'izo');
       DOM.ramkaIzo.value = '';
       renderHivesGrid(); renderIzosTable();
       switchTab(`tab-${getHiveCategory(hId)}`);
@@ -378,7 +425,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const frags = { dom: document.createDocumentFragment(), zbior: document.createDocumentFragment(), las: document.createDocumentFragment() };
 
     for (let i = 1; i <= TOTAL_HIVES; i++) {
-      const inspList = inspections.filter(x => x.hiveNum === i);
+      const inspList = inspections.filter(x => x.hiveNum === i).sort((a,b) => parseDateSafe(b.timestamp) - parseDateSafe(a.timestamp));
       const last = inspList[0];
       const hName = getHiveName(i);
       
@@ -452,12 +499,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderSheetTable() {
     const filter = DOM.filterHive ? DOM.filterHive.value : 'ALL';
-    const list = filter === 'ALL' ? inspections : inspections.filter(i => i.hiveNum === parseInt(filter));
+    const list = filter === 'ALL' ? [...inspections] : inspections.filter(i => i.hiveNum === parseInt(filter));
+    list.sort((a,b) => parseDateSafe(b.timestamp) - parseDateSafe(a.timestamp));
     
     renderTable(list, DOM.sheetTbody, i => `
       <td><strong>${formatPL(i.timestamp)}</strong></td>
       <td><span class="badge-count">Ul № ${i.hiveNum}</span></td>
-      <td><strong>${escapeHtml(i.hiveName)}</strong></td>
       <td><span class="badge-count" style="font-size:0.75rem;">${escapeHtml(i.rodzina || 'Silna')}</span></td>
       <td>${i.matka === 'TAK' ? '👑 TAK' : (i.matka === 'NIE WIEM' ? '🤷 NW' : '❌ NIE')}</td>
       <td>${i.jaja === 'TAK' ? '🥚 TAK' : '❌ NIE'}</td>
@@ -467,77 +514,88 @@ document.addEventListener('DOMContentLoaded', () => {
       <td>${escapeHtml(i.dzialania)}</td>
       <td><em style="color:#b45309;">${escapeHtml(i.przyszleDzialania)}</em></td>
       <td><button class="btn-delete-row btn-delete-inspection" data-id="${i.id}">🗑️</button></td>
-    `, 12);
+    `, 11);
   }
 
   function renderFeedingsTable() {
     const filter = DOM.filterHive ? DOM.filterHive.value : 'ALL';
-    const list = filter === 'ALL' ? feedings : feedings.filter(i => i.hiveNum === parseInt(filter));
+    const list = filter === 'ALL' ? [...feedings] : feedings.filter(i => i.hiveNum === parseInt(filter));
+    list.sort((a,b) => parseDateSafe(b.timestamp) - parseDateSafe(a.timestamp));
+    
     renderTable(list, DOM.mainFeedTbody, i => `
       <td><strong>${formatPL(i.timestamp)}</strong></td>
       <td><span class="badge-count">Ul № ${i.hiveNum}</span></td>
-      <td><strong>${escapeHtml(i.hiveName)}</strong></td>
       <td><strong style="color:#b45309;">${i.kgCukru} kg</strong></td>
       <td>${escapeHtml(i.uwagi)}</td>
       <td>
         <button class="btn-edit-row btn-edit-feeding-row" data-id="${i.id}">✏️</button>
         <button class="btn-delete-row btn-delete-feeding-row" data-id="${i.id}">🗑️</button>
       </td>
-    `, 6);
+    `, 5);
   }
 
   function renderTreatmentsTable() {
     const filter = DOM.filterHive ? DOM.filterHive.value : 'ALL';
-    const list = filter === 'ALL' ? treatments : treatments.filter(i => i.hiveNum === parseInt(filter));
+    const list = filter === 'ALL' ? [...treatments] : treatments.filter(i => i.hiveNum === parseInt(filter));
+    list.sort((a,b) => parseDateSafe(b.timestamp) - parseDateSafe(a.timestamp));
+    
     renderTable(list, DOM.mainTreatTbody, i => `
       <td><strong>${formatPL(i.timestamp)}</strong></td>
       <td><span class="badge-count">Ul № ${i.hiveNum}</span></td>
-      <td><strong>${escapeHtml(i.hiveName)}</strong></td>
       <td><strong style="color:#991b1b;">${escapeHtml(i.preparat)}</strong></td>
       <td>${escapeHtml(i.uwagi)}</td>
       <td>
         <button class="btn-edit-row btn-edit-treatment-row" data-id="${i.id}">✏️</button>
         <button class="btn-delete-row btn-delete-treatment-row" data-id="${i.id}">🗑️</button>
       </td>
-    `, 6);
+    `, 5);
   }
   
   function renderIzosTable() {
     const filter = DOM.filterHive ? DOM.filterHive.value : 'ALL';
-    const list = filter === 'ALL' ? izos : izos.filter(i => i.hiveNum === parseInt(filter));
+    const list = filter === 'ALL' ? [...izos] : izos.filter(i => i.hiveNum === parseInt(filter));
+    list.sort((a,b) => parseDateSafe(b.timestamp) - parseDateSafe(a.timestamp));
+    
     renderTable(list, DOM.mainIzoTbody, i => `
       <td><strong>${formatPL(i.timestamp)}</strong></td>
       <td><span class="badge-count">Ul № ${i.hiveNum}</span></td>
-      <td><strong>${escapeHtml(i.hiveName)}</strong></td>
       <td><strong style="color:#3730a3;">${escapeHtml(i.izoType)}</strong></td>
       <td>Po ramce: ${escapeHtml(i.ramka)}</td>
       <td>
         <button class="btn-edit-row btn-edit-izo-row" data-id="${i.id}">✏️</button>
         <button class="btn-delete-row btn-delete-izo-row" data-id="${i.id}">🗑️</button>
       </td>
-    `, 6);
+    `, 5);
   }
 
   function renderTodoList() {
     if (!DOM.todoList) return;
     const todos = inspections
       .filter(i => i.przyszleDzialania && i.przyszleDzialania.toLowerCase() !== 'brak planów' && i.przyszleDzialania.trim() !== '')
-      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      .sort((a, b) => parseDateSafe(b.timestamp) - parseDateSafe(a.timestamp));
     
     if(todos.length === 0) {
        DOM.todoList.innerHTML = '<li style="padding:10px;">Brak zadań w planach. Wszystko zrobione! 🎉</li>';
        return;
     }
-    DOM.todoList.innerHTML = todos.map(t => `<li style="padding:12px; border-bottom:1px solid #d1fae5; font-size:1rem;">
-      <strong style="color:#047857;">[${formatPL(t.timestamp)}] Ul № ${t.hiveNum} (${escapeHtml(t.hiveName)}):</strong><br>
-      <span style="color:#064e3b; display:inline-block; margin-top:4px;">👉 ${escapeHtml(t.przyszleDzialania)}</span>
-    </li>`).join('');
+    DOM.todoList.innerHTML = todos.map(t => {
+      const isDone = doneTodos.includes(t.id);
+      const textStyle = isDone ? 'text-decoration: line-through; color: #9ca3af;' : 'color:#064e3b;';
+      return `<li style="padding:12px; border-bottom:1px solid #d1fae5; font-size:1rem; display:flex; align-items:start; gap:10px;">
+        <input type="checkbox" class="cb-todo-done" data-id="${t.id}" style="margin-top:5px; transform:scale(1.4); cursor:pointer;" ${isDone ? 'checked' : ''}>
+        <div style="flex:1;">
+          <strong style="color:#047857;">Ul ${t.hiveNum}</strong> <span style="font-size:0.85rem; color:#6b7280;">- ${formatPL(t.timestamp)}</span><br>
+          <span class="todo-text" style="${textStyle} display:inline-block; margin-top:4px;">${escapeHtml(t.przyszleDzialania)}</span>
+        </div>
+        <button class="btn-edit-todo btn-small" data-id="${t.id}" style="padding:4px 8px;" title="Edytuj zadanie">✏️</button>
+      </li>`;
+    }).join('');
   }
 
   function renderLocalHistory(hiveNum) {
     const hId = parseInt(hiveNum);
     
-    const hiveInsp = inspections.filter(item => item.hiveNum === hId);
+    const hiveInsp = inspections.filter(item => item.hiveNum === hId).sort((a,b) => parseDateSafe(b.timestamp) - parseDateSafe(a.timestamp));
     if(DOM.localInspHist) {
       if (!hiveInsp.length) DOM.localInspHist.innerHTML = '<p style="color:#6b7280; font-size:0.9rem; padding:8px;">Brak wpisów.</p>';
       else DOM.localInspHist.innerHTML = hiveInsp.map(item => `<div style="background:var(--bg-color); border:1px solid var(--border-color); padding:8px; border-radius:6px; margin-bottom:6px; font-size:0.85rem;">
@@ -545,7 +603,7 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>`).join('');
     }
 
-    const hiveFeed = feedings.filter(item => item.hiveNum === hId);
+    const hiveFeed = feedings.filter(item => item.hiveNum === hId).sort((a,b) => parseDateSafe(b.timestamp) - parseDateSafe(a.timestamp));
     if(DOM.localFeedHist) {
       if (!hiveFeed.length) DOM.localFeedHist.innerHTML = '<p style="color:#6b7280; font-size:0.9rem; padding:8px;">Brak wpisów.</p>';
       else DOM.localFeedHist.innerHTML = hiveFeed.map(item => `<div style="background:#fffbf0; border:1px solid #fde68a; padding:8px; border-radius:6px; margin-bottom:6px; font-size:0.85rem;">
@@ -553,7 +611,7 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>`).join('');
     }
 
-    const hiveTreat = treatments.filter(item => item.hiveNum === hId);
+    const hiveTreat = treatments.filter(item => item.hiveNum === hId).sort((a,b) => parseDateSafe(b.timestamp) - parseDateSafe(a.timestamp));
     if(DOM.localTreatHist) {
       if (!hiveTreat.length) DOM.localTreatHist.innerHTML = '<p style="color:#6b7280; font-size:0.9rem; padding:8px;">Brak wpisów.</p>';
       else DOM.localTreatHist.innerHTML = hiveTreat.map(item => `<div style="background:#fef2f2; border:1px solid #fca5a5; padding:8px; border-radius:6px; margin-bottom:6px; font-size:0.85rem;">
@@ -561,7 +619,7 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>`).join('');
     }
     
-    const hiveIzos = izos.filter(item => item.hiveNum === hId);
+    const hiveIzos = izos.filter(item => item.hiveNum === hId).sort((a,b) => parseDateSafe(b.timestamp) - parseDateSafe(a.timestamp));
     if(DOM.localIzoHist) {
       if (!hiveIzos.length) DOM.localIzoHist.innerHTML = '<p style="color:#6b7280; font-size:0.9rem; padding:8px;">Brak wpisów.</p>';
       else DOM.localIzoHist.innerHTML = hiveIzos.map(item => `<div style="background:#eef2ff; border:1px solid #c7d2fe; padding:8px; border-radius:6px; margin-bottom:6px; font-size:0.85rem; display:flex; justify-content:space-between; align-items:center;">
@@ -576,7 +634,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function deleteRecord(type, id) {
     deleteFromGoogleSheets(type, id);
-    if (type === 'inspections') { inspections = inspections.filter(x => x.id !== id); Store.set(KEYS.INSPECTIONS, inspections); renderSheetTable(); }
+    if (type === 'inspections') { inspections = inspections.filter(x => x.id !== id); Store.set(KEYS.INSPECTIONS, inspections); renderSheetTable(); renderTodoList(); }
     if (type === 'feedings') { feedings = feedings.filter(x => x.id !== id); Store.set(KEYS.FEEDINGS, feedings); renderFeedingsTable(); }
     if (type === 'treatments') { treatments = treatments.filter(x => x.id !== id); Store.set(KEYS.TREATMENTS, treatments); renderTreatmentsTable(); }
     if (type === 'izos') { izos = izos.filter(x => x.id !== id); Store.set(KEYS.IZOS, izos); renderIzosTable(); }
@@ -686,10 +744,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (n !== null) { hiveQueens[id] = n.trim(); Store.set(KEYS.QUEENS, hiveQueens); renderHivesGrid(); renderSheetTable(); }
   }
 
-  function sendToGoogleSheets(record, type = 'inspection') {
+  // Funkcja uniwersalnie obsługująca nowe wpisy oraz aktualizacje istniejących (isUpdate = true)
+  function sendToGoogleSheets(record, type = 'inspection', isUpdate = false) {
     const url = getWebhookUrl();
     if (!url || url === 'TUTAJ_WKLEJ_TWOJ_ADRES_URL_WEBHOOKA') return;
-    const payloadStr = JSON.stringify({ ...record, type: type, timestamp: formatPL(record.timestamp) });
+    const recordCopy = { ...record, timestamp: formatPL(record.timestamp) };
+    const payload = isUpdate ? { action: 'update', type: type, data: recordCopy } : { ...recordCopy, type: type };
+    const payloadStr = JSON.stringify(payload);
+    
     if (navigator.sendBeacon) navigator.sendBeacon(url, new Blob([payloadStr], { type: 'text/plain;charset=UTF-8' }));
     else fetch(url, { method: 'POST', mode: 'no-cors', body: payloadStr }).catch(console.error);
   }
@@ -738,10 +800,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function openHiveHistoryModal(hiveNum) {
     const nameOfHive = getHiveName(hiveNum);
-    const hiveInsp = inspections.filter(item => item.hiveNum === hiveNum);
-    const hiveFeed = feedings.filter(item => item.hiveNum === hiveNum);
-    const hiveTreat = treatments.filter(item => item.hiveNum === hiveNum);
-    const hiveIzos = izos.filter(item => item.hiveNum === hiveNum);
+    const hiveInsp = inspections.filter(item => item.hiveNum === hiveNum).sort((a,b) => parseDateSafe(b.timestamp) - parseDateSafe(a.timestamp));
+    const hiveFeed = feedings.filter(item => item.hiveNum === hiveNum).sort((a,b) => parseDateSafe(b.timestamp) - parseDateSafe(a.timestamp));
+    const hiveTreat = treatments.filter(item => item.hiveNum === hiveNum).sort((a,b) => parseDateSafe(b.timestamp) - parseDateSafe(a.timestamp));
+    const hiveIzos = izos.filter(item => item.hiveNum === hiveNum).sort((a,b) => parseDateSafe(b.timestamp) - parseDateSafe(a.timestamp));
     
     qsid('modal-hive-title').textContent = `📜 Historia Ula: ${nameOfHive}`;
 
