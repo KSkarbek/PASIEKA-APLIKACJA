@@ -187,20 +187,16 @@
           <textarea id="input-przyszle-dzialania" class="input-control" rows="2" placeholder="np. Skontrolować mateczniki za 7 dni"></textarea>
         </div>
 
-        <!-- POWIĘKSZONY PRZYCISK ZAPISU -->
         <div class="form-actions margin-top-lg">
-          <button type="submit" id="btn-submit-inspection" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: 3px solid #047857; font-size: 1.6rem; font-weight: 800; padding: 22px; width: 100%; border-radius: 12px; box-shadow: 0 8px 15px rgba(0,0,0,0.2); text-transform: uppercase; cursor: pointer;">
+          <button type="submit" id="btn-submit-inspection" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: 3px solid #047857; font-size: 1.6rem; font-weight: 800; padding: 22px; width: 100%; border-radius: 12px; box-shadow: 0 8px 15px rgba(0,0,0,0.2); text-transform: uppercase;">
             💾 ZAPISZ PRZEGLĄD
           </button>
         </div>
       </form>
     </div>
     
-    <!-- EDYTOWALNA HISTORIA PRZEGLĄDÓW ULA -->
     <div class="card margin-top-md">
-      <div class="card-header">
-        <h3>📋 Ostatnie przeglądy tego ula</h3>
-      </div>
+      <div class="card-header"><h3>📋 Ostatnie przeglądy tego ula</h3></div>
       <div id="local-inspection-history" style="padding: 8px;">Brak wpisów...</div>
     </div>
   </section>
@@ -240,16 +236,13 @@
         </div>
 
         <div class="form-actions">
-          <button type="submit" id="btn-submit-feeding" class="btn-primary btn-xl" style="background:#d97706; border-color:#b45309; padding: 18px; font-size: 1.3rem;">💾 Zapisz Karmienie</button>
+          <button type="submit" id="btn-submit-feeding" class="btn-primary btn-xl" style="background:#d97706; border-color:#b45309;">💾 Zapisz Karmienie</button>
         </div>
       </form>
     </div>
 
-    <!-- EDYTOWALNA HISTORIA KARMIENIA ULA -->
     <div class="card margin-top-md">
-      <div class="card-header" style="background: #fef3c7; color: #92400e;">
-        <h3>🍯 Historia karmienia tego ula</h3>
-      </div>
+      <div class="card-header" style="background: #fef3c7; color: #92400e;"><h3>🍯 Historia karmienia tego ula</h3></div>
       <div id="local-feeding-history" style="padding: 8px;">Brak wpisów...</div>
     </div>
   </section>
@@ -285,16 +278,13 @@
         </div>
 
         <div class="form-actions">
-          <button type="submit" id="btn-submit-treatment" class="btn-primary btn-xl" style="background:#dc2626; border-color:#991b1b; padding: 18px; font-size: 1.3rem;">💾 Zapisz Leczenie</button>
+          <button type="submit" id="btn-submit-treatment" class="btn-primary btn-xl" style="background:#dc2626; border-color:#991b1b;">💾 Zapisz Leczenie</button>
         </div>
       </form>
     </div>
 
-    <!-- EDYTOWALNA HISTORIA LECZENIA ULA -->
     <div class="card margin-top-md">
-      <div class="card-header" style="background: #fee2e2; color: #991b1b;">
-        <h3>💉 Historia leczenia tego ula</h3>
-      </div>
+      <div class="card-header" style="background: #fee2e2; color: #991b1b;"><h3>💉 Historia leczenia tego ula</h3></div>
       <div id="local-treatment-history" style="padding: 8px;">Brak wpisów...</div>
     </div>
   </section>
@@ -333,16 +323,13 @@
         </div>
 
         <div class="form-actions">
-          <button type="submit" id="btn-submit-izo" class="btn-primary btn-xl" style="background:#4f46e5; border-color:#3730a3; padding: 18px; font-size: 1.3rem;">💾 Zapisz IZO</button>
+          <button type="submit" id="btn-submit-izo" class="btn-primary btn-xl" style="background:#4f46e5; border-color:#3730a3;">💾 Zapisz IZO</button>
         </div>
       </form>
     </div>
 
-    <!-- EDYTOWALNA HISTORIA IZO POD FORMULARZEM -->
     <div class="card margin-top-md">
-      <div class="card-header" style="background: #e0e7ff; color: #3730a3;">
-        <h3>🗃️ Historia IZO tego ula</h3>
-      </div>
+      <div class="card-header" style="background: #e0e7ff; color: #3730a3;"><h3>🗃️ Historia IZO tego ula</h3></div>
       <div id="local-izo-history" style="padding: 8px;">Brak wpisów...</div>
     </div>
   </section>
@@ -357,10 +344,10 @@
         </div>
         <div class="sheet-actions" style="display:flex; gap:8px; flex-wrap:wrap;">
           <a href="https://docs.google.com/spreadsheets/u/0/" target="_blank" class="btn-gsheet" style="padding: 10px 14px; text-decoration:none;">
-            🟢 Otwórz plik
+            🟢 Otwórz plik APLIK PASIEKA
           </a>
           <button id="btn-sync-now" class="btn-primary" style="padding: 10px 14px; font-size: 0.9rem;">
-            🔄 Synchronizuj z Sheets
+            🔄 Synchronizuj z Google Sheets
           </button>
         </div>
       </div>
@@ -415,6 +402,7 @@
 
       <!-- TABELA KARMIENIA -->
       <div id="wrapper-feedings-table" class="table-wrapper margin-top-md hidden">
+        <div id="feeding-summary-text" style="font-weight:600; color:#b45309; margin-bottom:8px;"></div>
         <table class="data-table">
           <thead>
             <tr>
