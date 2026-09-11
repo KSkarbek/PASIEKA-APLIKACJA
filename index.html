@@ -83,7 +83,7 @@
         <h2>📋 Planowane Zadania do Zrobienia</h2>
       </div>
       <ul id="todo-list" style="list-style: none; padding: 10px; margin: 0;">
-        <!-- Lista generowana dynamicznie -->
+        <!-- Lista z JS -->
       </ul>
     </div>
   </section>
@@ -187,8 +187,11 @@
           <textarea id="input-przyszle-dzialania" class="input-control" rows="2" placeholder="np. Skontrolować mateczniki za 7 dni"></textarea>
         </div>
 
-        <div class="form-actions">
-          <button type="submit" class="btn-primary btn-xl">💾 Zapisz Przegląd</button>
+        <!-- POWIĘKSZONY PRZYCISK ZAPISU -->
+        <div class="form-actions margin-top-lg">
+          <button type="submit" id="btn-submit-inspection" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: 3px solid #047857; font-size: 1.6rem; font-weight: 800; padding: 22px; width: 100%; border-radius: 12px; box-shadow: 0 8px 15px rgba(0,0,0,0.2); text-transform: uppercase; cursor: pointer; transition: transform 0.1s;">
+            💾 ZAPISZ PRZEGLĄD
+          </button>
         </div>
       </form>
     </div>
@@ -234,7 +237,7 @@
         </div>
 
         <div class="form-actions">
-          <button type="submit" class="btn-primary btn-xl" style="background:#d97706; border-color:#b45309;">💾 Zapisz Karmienie</button>
+          <button type="submit" id="btn-submit-feeding" class="btn-primary btn-xl" style="background:#d97706; border-color:#b45309; padding: 18px; font-size: 1.3rem;">💾 Zapisz Karmienie</button>
         </div>
       </form>
     </div>
@@ -276,7 +279,7 @@
         </div>
 
         <div class="form-actions">
-          <button type="submit" class="btn-primary btn-xl" style="background:#dc2626; border-color:#991b1b;">💾 Zapisz Leczenie</button>
+          <button type="submit" id="btn-submit-treatment" class="btn-primary btn-xl" style="background:#dc2626; border-color:#991b1b; padding: 18px; font-size: 1.3rem;">💾 Zapisz Leczenie</button>
         </div>
       </form>
     </div>
@@ -321,7 +324,7 @@
         </div>
 
         <div class="form-actions">
-          <button type="submit" class="btn-primary btn-xl" style="background:#4f46e5; border-color:#3730a3;">💾 Zapisz IZO</button>
+          <button type="submit" id="btn-submit-izo" class="btn-primary btn-xl" style="background:#4f46e5; border-color:#3730a3; padding: 18px; font-size: 1.3rem;">💾 Zapisz IZO</button>
         </div>
       </form>
     </div>
@@ -403,7 +406,6 @@
 
       <!-- TABELA KARMIENIA -->
       <div id="wrapper-feedings-table" class="table-wrapper margin-top-md hidden">
-        <div id="feeding-summary-text" style="font-weight:600; color:#b45309; margin-bottom:8px;"></div>
         <table class="data-table">
           <thead>
             <tr>
