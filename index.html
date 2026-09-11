@@ -83,7 +83,7 @@
         <h2>📋 Planowane Zadania do Zrobienia</h2>
       </div>
       <ul id="todo-list" style="list-style: none; padding: 10px; margin: 0;">
-        <!-- Lista z JS -->
+        <!-- Lista generowana dynamicznie -->
       </ul>
     </div>
   </section>
@@ -189,15 +189,18 @@
 
         <!-- POWIĘKSZONY PRZYCISK ZAPISU -->
         <div class="form-actions margin-top-lg">
-          <button type="submit" id="btn-submit-inspection" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: 3px solid #047857; font-size: 1.6rem; font-weight: 800; padding: 22px; width: 100%; border-radius: 12px; box-shadow: 0 8px 15px rgba(0,0,0,0.2); text-transform: uppercase; cursor: pointer; transition: transform 0.1s;">
+          <button type="submit" id="btn-submit-inspection" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: 3px solid #047857; font-size: 1.6rem; font-weight: 800; padding: 22px; width: 100%; border-radius: 12px; box-shadow: 0 8px 15px rgba(0,0,0,0.2); text-transform: uppercase; cursor: pointer;">
             💾 ZAPISZ PRZEGLĄD
           </button>
         </div>
       </form>
     </div>
     
+    <!-- EDYTOWALNA HISTORIA PRZEGLĄDÓW ULA -->
     <div class="card margin-top-md">
-      <div class="card-header"><h3>📋 Ostatnie przeglądy tego ula</h3></div>
+      <div class="card-header">
+        <h3>📋 Ostatnie przeglądy tego ula</h3>
+      </div>
       <div id="local-inspection-history" style="padding: 8px;">Brak wpisów...</div>
     </div>
   </section>
@@ -242,8 +245,11 @@
       </form>
     </div>
 
+    <!-- EDYTOWALNA HISTORIA KARMIENIA ULA -->
     <div class="card margin-top-md">
-      <div class="card-header" style="background: #fef3c7; color: #92400e;"><h3>🍯 Historia karmienia tego ula</h3></div>
+      <div class="card-header" style="background: #fef3c7; color: #92400e;">
+        <h3>🍯 Historia karmienia tego ula</h3>
+      </div>
       <div id="local-feeding-history" style="padding: 8px;">Brak wpisów...</div>
     </div>
   </section>
@@ -284,8 +290,11 @@
       </form>
     </div>
 
+    <!-- EDYTOWALNA HISTORIA LECZENIA ULA -->
     <div class="card margin-top-md">
-      <div class="card-header" style="background: #fee2e2; color: #991b1b;"><h3>💉 Historia leczenia tego ula</h3></div>
+      <div class="card-header" style="background: #fee2e2; color: #991b1b;">
+        <h3>💉 Historia leczenia tego ula</h3>
+      </div>
       <div id="local-treatment-history" style="padding: 8px;">Brak wpisów...</div>
     </div>
   </section>
