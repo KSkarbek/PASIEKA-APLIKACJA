@@ -19,9 +19,12 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-sync-now').addEventListener('click', fetchFromGoogleSheets);
   
   // Kalkulator daty leczenia dla IZO
-  document.getElementById('input-izo-date').addEventListener('change', (e) => {
-    updateIzoLeczenieDate(e.target.value);
-  });
+  const izoDateInput = document.getElementById('input-izo-date');
+  if (izoDateInput) {
+    izoDateInput.addEventListener('change', (e) => {
+      updateIzoLeczenieDate(e.target.value);
+    });
+  }
 });
 
 function updateIzoLeczenieDate(sourceDateStr) {
@@ -38,30 +41,37 @@ function initTabs() {
     btn.addEventListener('click', (e) => {
       document.querySelectorAll('.tab-btn, .tab-content').forEach(el => el.classList.remove('active'));
       e.target.classList.add('active');
-      document.getElementById(e.target.dataset.tab).classList.add('active');
+      const tabContent = document.getElementById(e.target.dataset.tab);
+      if(tabContent) tabContent.classList.add('active');
       if(e.target.dataset.tab === 'tab-todo') renderTodos();
     });
   });
   
   const hTabs = ['inspections', 'feedings', 'treatments', 'izos'];
   hTabs.forEach(type => {
-    document.getElementById(`btn-view-${type}`).addEventListener('click', (e) => {
-      document.querySelectorAll('.btn-tab-toggle').forEach(el => el.classList.remove('active'));
-      e.target.classList.add('active');
-      hTabs.forEach(t => document.getElementById(`wrapper-${t}-table`).classList.add('hidden'));
-      document.getElementById(`wrapper-${type}-table`).classList.remove('hidden');
-    });
+    const btn = document.getElementById(`btn-view-${type}`);
+    if (btn) {
+      btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.btn-tab-toggle').forEach(el => el.classList.remove('active'));
+        e.target.classList.add('active');
+        hTabs.forEach(t => document.getElementById(`wrapper-${t}-table`).classList.add('hidden'));
+        document.getElementById(`wrapper-${type}-table`).classList.remove('hidden');
+      });
+    }
   });
 }
 
+// NAPRAWIONE: Dodano sekcję opisów przeglądów na kafelkach
 function initHives() {
   const renderGrid = (start, end, gridId) => {
     const grid = document.getElementById(gridId);
+    if (!grid) return;
     grid.innerHTML = '';
     for(let i = start; i <= end; i++) {
       grid.innerHTML += `
         <div class="hive-card">
           <div class="hive-number">${i}</div>
+          <div id="hive-desc-${i}" style="margin: 6px 0; font-size: 0.85rem; color: #4b5563; min-height: 2.5rem; line-height: 1.2;">Ładowanie danych...</div>
           <div style="display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap;">
             <button class="btn-small" style="flex:1;" onclick="openForm('inspection', ${i})">📋 Przegląd</button>
             <button class="btn-small" style="flex:1;" onclick="openForm('feeding', ${i})">🍯 Pokarm</button>
@@ -76,10 +86,33 @@ function initHives() {
   renderGrid(13, 18, 'hives-grid-las');
 }
 
+// Aktualizacja opisów na kafelkach po pobraniu danych z Arkusza
+function updateHiveCards() {
+  for(let i = 1; i <= 18; i++) {
+    let descDiv = document.getElementById(`hive-desc-${i}`);
+    if(!descDiv) continue;
+    
+    let hiveInspections = state.inspections.filter(r => String(r.hiveNum) === String(i)).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+    
+    if(hiveInspections.length > 0) {
+        let last = hiveInspections[0];
+        let dateOnly = fd(last.timestamp).split(',')[0];
+        descDiv.innerHTML = `<b>${dateOnly}</b><br>Czerw: ${last.ramkiCzerwiu} | Pokarm: ${last.pokarm}`;
+    } else {
+        descDiv.innerHTML = `<span style="color:#9ca3af;">Brak przeglądów</span>`;
+    }
+  }
+}
+
+// NAPRAWIONE: Zabezpieczono przed błędem "null" przy szukaniu przycisków
 function openForm(type, hiveNum) {
   document.querySelectorAll('.tab-btn, .tab-content').forEach(el => el.classList.remove('active'));
-  document.querySelector(`[data-tab="tab-${type}"]`).classList.add('active');
-  document.getElementById(`tab-${type}`).classList.add('active');
+  
+  let tabBtn = document.querySelector(`[data-tab="tab-${type}"]`);
+  if (tabBtn) tabBtn.classList.add('active'); 
+  
+  let tabContent = document.getElementById(`tab-${type}`);
+  if (tabContent) tabContent.classList.add('active');
   
   const now = new Date();
   now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
@@ -93,7 +126,8 @@ function openForm(type, hiveNum) {
   }
 
   const form = document.getElementById(`${type}-form`);
-  delete form.dataset.editId;
+  if (form) delete form.dataset.editId;
+  
   const btn = document.getElementById(`btn-submit-${type}`);
   if(btn) btn.innerHTML = btn.innerHTML.replace('ZAKTUALIZUJ', 'ZAPISZ'); 
 
@@ -111,16 +145,17 @@ function renderGlobalTables() {
   const tbodyTreat = document.getElementById('treatments-tbody');
   const tbodyIzo = document.getElementById('izos-tbody');
   
-  tbodyInsp.innerHTML = state.inspections.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).map(r => `
+  if(tbodyInsp) tbodyInsp.innerHTML = state.inspections.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).map(r => `
     <tr>
-      <td>${fd(r.timestamp)}</td><td><b>${r.hiveNum}</b></td><td>${r.dzialania}</td><td>${r.przyszleDzialania}</td>
+      <td>${fd(r.timestamp)}</td><td><b>${r.hiveNum}</b></td><td>${r.rodzina}</td><td>${r.matka}</td><td>${r.jaja}</td>
+      <td>${r.ramkiCzerwiu}</td><td>${r.pokarm}</td><td>${r.polkorpus}</td><td>${r.dzialania}</td><td>${r.przyszleDzialania}</td>
       <td>
         <button onclick="editRecord('${r.id}', 'inspection')" class="btn-small">✏️</button>
         <button onclick="deleteRecord('${r.id}', 'inspection')" class="btn-small" style="background:red; color:white;">🗑️</button>
       </td>
     </tr>`).join('');
 
-  tbodyFeed.innerHTML = state.feedings.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).map(r => `
+  if(tbodyFeed) tbodyFeed.innerHTML = state.feedings.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).map(r => `
     <tr>
       <td>${fd(r.timestamp)}</td><td><b>${r.hiveNum}</b></td><td>${r.kgCukru} kg</td><td>${r.uwagi}</td>
       <td>
@@ -129,7 +164,7 @@ function renderGlobalTables() {
       </td>
     </tr>`).join('');
 
-  tbodyTreat.innerHTML = state.treatments.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).map(r => `
+  if(tbodyTreat) tbodyTreat.innerHTML = state.treatments.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).map(r => `
     <tr>
       <td>${fd(r.timestamp)}</td><td><b>${r.hiveNum}</b></td><td>${r.preparat}</td><td>${r.uwagi}</td>
       <td>
@@ -138,9 +173,9 @@ function renderGlobalTables() {
       </td>
     </tr>`).join('');
 
-  tbodyIzo.innerHTML = state.izos.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).map(r => `
+  if(tbodyIzo) tbodyIzo.innerHTML = state.izos.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).map(r => `
     <tr>
-      <td>${fd(r.timestamp)}</td><td><b>${r.hiveNum}</b></td><td>${r.izoType}</td>
+      <td>${fd(r.timestamp)}</td><td><b>${r.hiveNum}</b></td><td>${r.izoType}</td><td>Ramka: ${r.ramka}</td>
       <td style="color:#dc2626; font-weight:bold;">${r.kiedyLeczyc || ''}</td>
       <td>
         <button onclick="editRecord('${r.id}', 'izo')" class="btn-small">✏️</button>
@@ -163,7 +198,7 @@ function renderLocalHistory(type, hiveNum) {
 
   container.innerHTML = filtered.map(r => {
     let details = '';
-    if(type === 'inspection') details = `Plan: ${r.przyszleDzialania}`;
+    if(type === 'inspection') details = `Czerw: ${r.ramkiCzerwiu}, Plan: ${r.przyszleDzialania}`;
     if(type === 'feeding') details = `Syrop: ${r.kgCukru}kg, Uwagi: ${r.uwagi}`;
     if(type === 'treatment') details = `Lek: ${r.preparat}, Uwagi: ${r.uwagi}`;
     if(type === 'izo') details = `Operacja: ${r.izoType}, Ramka: ${r.ramka}<br><span style="color:#dc2626; font-weight:bold;">Kiedy leczyć: ${r.kiedyLeczyc || '-'}</span>`;
@@ -180,7 +215,7 @@ function renderLocalHistory(type, hiveNum) {
 
 function renderTodos() {
   const ul = document.getElementById('todo-list');
-  // Filtrowanie - tylko gdy jest plan z wpisem
+  if(!ul) return;
   let todos = state.inspections.filter(i => i.przyszleDzialania && i.przyszleDzialania.trim() !== '' && i.przyszleDzialania.trim().toLowerCase() !== 'brak planów').sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
   
   if(todos.length === 0) { ul.innerHTML = '<li>Brak zaplanowanych zadań.</li>'; return; }
@@ -220,7 +255,7 @@ function editRecord(id, type) {
   openForm(type, record.hiveNum);
   
   const form = document.getElementById(`${type}-form`);
-  form.dataset.editId = id; 
+  if(form) form.dataset.editId = id; 
   const btn = document.getElementById(`btn-submit-${type}`);
   if(btn) btn.innerHTML = btn.innerHTML.replace('ZAPISZ', 'ZAKTUALIZUJ');
 
@@ -253,16 +288,19 @@ function editRecord(id, type) {
 
 function initForms() {
   ['inspection', 'feeding', 'treatment', 'izo'].forEach(type => {
-    document.getElementById(`${type}-form`).addEventListener('submit', async (e) => {
+    const form = document.getElementById(`${type}-form`);
+    if(!form) return;
+    
+    form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const form = e.target;
-      const btn = form.querySelector('button[type="submit"]');
-      btn.disabled = true;
-      setTimeout(() => btn.disabled = false, 2500);
+      const formEl = e.target;
+      const btn = formEl.querySelector('button[type="submit"]');
+      if(btn) btn.disabled = true;
+      setTimeout(() => { if(btn) btn.disabled = false; }, 2500);
 
-      const isEdit = !!form.dataset.editId;
+      const isEdit = !!formEl.dataset.editId;
       let payload = {
-        id: isEdit ? form.dataset.editId : Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+        id: isEdit ? formEl.dataset.editId : Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
         timestamp: document.getElementById(`input-${type === 'inspection' ? '' : type + '-'}date`).value,
         hiveNum: document.getElementById(`select-${type === 'inspection' ? '' : type + '-'}hive`).value
       };
@@ -291,8 +329,8 @@ function initForms() {
       try {
         await fetch(getWebhookUrl(), { method: 'POST', body: JSON.stringify(reqBody) });
         alert(isEdit ? "Zaktualizowano wpis!" : "Zapisano wpis!");
-        form.reset();
-        delete form.dataset.editId;
+        formEl.reset();
+        delete formEl.dataset.editId;
         if(btn) btn.innerHTML = btn.innerHTML.replace('ZAKTUALIZUJ', 'ZAPISZ');
         fetchFromGoogleSheets();
       } catch(e) { alert("Błąd zapisu! Sprawdź połączenie."); }
@@ -302,7 +340,10 @@ function initForms() {
 
 function fetchFromGoogleSheets() {
   const url = getWebhookUrl();
-  if (!url || url === DEFAULT_WEBHOOK) return;
+  if (!url || url === DEFAULT_WEBHOOK) {
+    console.warn("Zastępczy URL Webhooka - Skrypt wstrzymany. Podaj prawdziwy adres w app.js.");
+    return;
+  }
   fetch(url).then(r => r.json()).then(res => {
     if (res && typeof res === 'object') {
       if(Array.isArray(res.inspections)) state.inspections = res.inspections.filter(isValid);
@@ -312,6 +353,7 @@ function fetchFromGoogleSheets() {
       
       renderGlobalTables();
       renderTodos();
+      updateHiveCards();
       
       ['inspection', 'feeding', 'treatment', 'izo'].forEach(type => {
          const selectObj = document.getElementById(`select-${type === 'inspection' ? '' : type + '-'}hive`);
