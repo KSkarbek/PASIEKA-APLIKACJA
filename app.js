@@ -105,7 +105,6 @@ function fd(d) {
   return new Date(d).toLocaleString('pl-PL', {dateStyle: 'short', timeStyle: 'short'});
 }
 
-// Globalne tabele z sortowaniem od najnowszych
 function renderGlobalTables() {
   const tbodyInsp = document.getElementById('sheet-tbody');
   const tbodyFeed = document.getElementById('feedings-tbody');
@@ -114,8 +113,7 @@ function renderGlobalTables() {
   
   tbodyInsp.innerHTML = state.inspections.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).map(r => `
     <tr>
-      <td>${fd(r.timestamp)}</td><td><b>${r.hiveNum}</b></td><td>${r.rodzina}</td><td>${r.matka}</td><td>${r.jaja}</td>
-      <td>${r.ramkiCzerwiu}</td><td>${r.pokarm}</td><td>${r.polkorpus}</td><td>${r.dzialania}</td><td>${r.przyszleDzialania}</td>
+      <td>${fd(r.timestamp)}</td><td><b>${r.hiveNum}</b></td><td>${r.dzialania}</td><td>${r.przyszleDzialania}</td>
       <td>
         <button onclick="editRecord('${r.id}', 'inspection')" class="btn-small">✏️</button>
         <button onclick="deleteRecord('${r.id}', 'inspection')" class="btn-small" style="background:red; color:white;">🗑️</button>
@@ -142,7 +140,7 @@ function renderGlobalTables() {
 
   tbodyIzo.innerHTML = state.izos.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).map(r => `
     <tr>
-      <td>${fd(r.timestamp)}</td><td><b>${r.hiveNum}</b></td><td>${r.izoType}</td><td>Ramka: ${r.ramka}</td>
+      <td>${fd(r.timestamp)}</td><td><b>${r.hiveNum}</b></td><td>${r.izoType}</td>
       <td style="color:#dc2626; font-weight:bold;">${r.kiedyLeczyc || ''}</td>
       <td>
         <button onclick="editRecord('${r.id}', 'izo')" class="btn-small">✏️</button>
@@ -151,7 +149,6 @@ function renderGlobalTables() {
     </tr>`).join('');
 }
 
-// Lokalne Historie pod formularzem
 function renderLocalHistory(type, hiveNum) {
   const container = document.getElementById(`local-${type}-history`);
   if(!container) return;
@@ -166,7 +163,7 @@ function renderLocalHistory(type, hiveNum) {
 
   container.innerHTML = filtered.map(r => {
     let details = '';
-    if(type === 'inspection') details = `Czerw: ${r.ramkiCzerwiu}, Plan: ${r.przyszleDzialania}`;
+    if(type === 'inspection') details = `Plan: ${r.przyszleDzialania}`;
     if(type === 'feeding') details = `Syrop: ${r.kgCukru}kg, Uwagi: ${r.uwagi}`;
     if(type === 'treatment') details = `Lek: ${r.preparat}, Uwagi: ${r.uwagi}`;
     if(type === 'izo') details = `Operacja: ${r.izoType}, Ramka: ${r.ramka}<br><span style="color:#dc2626; font-weight:bold;">Kiedy leczyć: ${r.kiedyLeczyc || '-'}</span>`;
@@ -181,9 +178,9 @@ function renderLocalHistory(type, hiveNum) {
   }).join('');
 }
 
-// Lista zadań ZROBIĆ - pokazywane tylko te z wypełnionym planem
 function renderTodos() {
   const ul = document.getElementById('todo-list');
+  // Filtrowanie - tylko gdy jest plan z wpisem
   let todos = state.inspections.filter(i => i.przyszleDzialania && i.przyszleDzialania.trim() !== '' && i.przyszleDzialania.trim().toLowerCase() !== 'brak planów').sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
   
   if(todos.length === 0) { ul.innerHTML = '<li>Brak zaplanowanych zadań.</li>'; return; }
