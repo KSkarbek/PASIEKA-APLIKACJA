@@ -1,4 +1,4 @@
-// UWAGA: Wklej poniżej swój link do webhooka!
+// UWAGA: Wklej poniżej swój link do webhooka z Google Apps Script!
 const DEFAULT_WEBHOOK = 'https://script.google.com/macros/s/AKfycbx2PUdp6AyROHIr97rmxa_pCVJmKHXrgYseOZBRoVkQnmKiVU_l_-jSP2Ux_gAA7gNfuA/exec';
 
 let state = {
@@ -16,7 +16,11 @@ document.addEventListener('DOMContentLoaded', () => {
   initHives();
   initForms();
   fetchFromGoogleSheets();
-  document.getElementById('btn-sync-now').addEventListener('click', fetchFromGoogleSheets);
+  
+  const syncBtn = document.getElementById('btn-sync-now');
+  if (syncBtn) {
+    syncBtn.addEventListener('click', fetchFromGoogleSheets);
+  }
   
   // Kalkulator daty leczenia dla IZO
   const izoDateInput = document.getElementById('input-izo-date');
@@ -32,7 +36,10 @@ function updateIzoLeczenieDate(sourceDateStr) {
   let d = new Date(sourceDateStr);
   if (!isNaN(d)) {
     d.setDate(d.getDate() + 24);
-    document.getElementById('input-izo-kiedy-leczyc').value = d.toISOString().split('T')[0];
+    const kiedyLeczycEl = document.getElementById('input-izo-kiedy-leczyc');
+    if (kiedyLeczycEl) {
+      kiedyLeczycEl.value = d.toISOString().split('T')[0];
+    }
   }
 }
 
@@ -40,10 +47,11 @@ function initTabs() {
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       document.querySelectorAll('.tab-btn, .tab-content').forEach(el => el.classList.remove('active'));
-      e.target.classList.add('active');
-      const tabContent = document.getElementById(e.target.dataset.tab);
+      const targetBtn = e.currentTarget;
+      targetBtn.classList.add('active');
+      const tabContent = document.getElementById(targetBtn.dataset.tab);
       if(tabContent) tabContent.classList.add('active');
-      if(e.target.dataset.tab === 'tab-todo') renderTodos();
+      if(targetBtn.dataset.tab === 'tab-todo') renderTodos();
     });
   });
   
@@ -53,15 +61,18 @@ function initTabs() {
     if (btn) {
       btn.addEventListener('click', (e) => {
         document.querySelectorAll('.btn-tab-toggle').forEach(el => el.classList.remove('active'));
-        e.target.classList.add('active');
-        hTabs.forEach(t => document.getElementById(`wrapper-${t}-table`).classList.add('hidden'));
-        document.getElementById(`wrapper-${type}-table`).classList.remove('hidden');
+        e.currentTarget.classList.add('active');
+        hTabs.forEach(t => {
+          const wrapper = document.getElementById(`wrapper-${t}-table`);
+          if (wrapper) wrapper.classList.add('hidden');
+        });
+        const targetWrapper = document.getElementById(`wrapper-${type}-table`);
+        if (targetWrapper) targetWrapper.classList.remove('hidden');
       });
     }
   });
 }
 
-// NAPRAWIONE: Dodano sekcję opisów przeglądów na kafelkach
 function initHives() {
   const renderGrid = (start, end, gridId) => {
     const grid = document.getElementById(gridId);
@@ -86,7 +97,6 @@ function initHives() {
   renderGrid(13, 18, 'hives-grid-las');
 }
 
-// Aktualizacja opisów na kafelkach po pobraniu danych z Arkusza
 function updateHiveCards() {
   for(let i = 1; i <= 18; i++) {
     let descDiv = document.getElementById(`hive-desc-${i}`);
@@ -104,12 +114,8 @@ function updateHiveCards() {
   }
 }
 
-// NAPRAWIONE: Zabezpieczono przed błędem "null" przy szukaniu przycisków
 function openForm(type, hiveNum) {
   document.querySelectorAll('.tab-btn, .tab-content').forEach(el => el.classList.remove('active'));
-  
-  let tabBtn = document.querySelector(`[data-tab="tab-${type}"]`);
-  if (tabBtn) tabBtn.classList.add('active'); 
   
   let tabContent = document.getElementById(`tab-${type}`);
   if (tabContent) tabContent.classList.add('active');
@@ -118,8 +124,11 @@ function openForm(type, hiveNum) {
   now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
   const nowStr = now.toISOString().slice(0,16);
 
-  document.getElementById(`select-${type === 'inspection' ? '' : type + '-'}hive`).innerHTML = `<option value="${hiveNum}">${hiveNum}</option>`;
-  document.getElementById(`input-${type === 'inspection' ? '' : type + '-'}date`).value = nowStr;
+  const selectHive = document.getElementById(`select-${type === 'inspection' ? '' : type + '-'}hive`);
+  if (selectHive) selectHive.innerHTML = `<option value="${hiveNum}">${hiveNum}</option>`;
+  
+  const inputDate = document.getElementById(`input-${type === 'inspection' ? '' : type + '-'}date`);
+  if (inputDate) inputDate.value = nowStr;
   
   if (type === 'izo') {
     updateIzoLeczenieDate(nowStr);
@@ -147,8 +156,8 @@ function renderGlobalTables() {
   
   if(tbodyInsp) tbodyInsp.innerHTML = state.inspections.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).map(r => `
     <tr>
-      <td>${fd(r.timestamp)}</td><td><b>${r.hiveNum}</b></td><td>${r.rodzina}</td><td>${r.matka}</td><td>${r.jaja}</td>
-      <td>${r.ramkiCzerwiu}</td><td>${r.pokarm}</td><td>${r.polkorpus}</td><td>${r.dzialania}</td><td>${r.przyszleDzialania}</td>
+      <td>${fd(r.timestamp)}</td><td><b>${r.hiveNum}</b></td><td>${r.rodzina || ''}</td><td>${r.matka || ''}</td><td>${r.jaja || ''}</td>
+      <td>${r.ramkiCzerwiu || ''}</td><td>${r.pokarm || ''}</td><td>${r.polkorpus || ''}</td><td>${r.dzialania || ''}</td><td>${r.przyszleDzialania || ''}</td>
       <td>
         <button onclick="editRecord('${r.id}', 'inspection')" class="btn-small">✏️</button>
         <button onclick="deleteRecord('${r.id}', 'inspection')" class="btn-small" style="background:red; color:white;">🗑️</button>
@@ -157,7 +166,7 @@ function renderGlobalTables() {
 
   if(tbodyFeed) tbodyFeed.innerHTML = state.feedings.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).map(r => `
     <tr>
-      <td>${fd(r.timestamp)}</td><td><b>${r.hiveNum}</b></td><td>${r.kgCukru} kg</td><td>${r.uwagi}</td>
+      <td>${fd(r.timestamp)}</td><td><b>${r.hiveNum}</b></td><td>${r.kgCukru || ''} kg</td><td>${r.uwagi || ''}</td>
       <td>
         <button onclick="editRecord('${r.id}', 'feeding')" class="btn-small">✏️</button>
         <button onclick="deleteRecord('${r.id}', 'feeding')" class="btn-small" style="background:red; color:white;">🗑️</button>
@@ -166,7 +175,7 @@ function renderGlobalTables() {
 
   if(tbodyTreat) tbodyTreat.innerHTML = state.treatments.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).map(r => `
     <tr>
-      <td>${fd(r.timestamp)}</td><td><b>${r.hiveNum}</b></td><td>${r.preparat}</td><td>${r.uwagi}</td>
+      <td>${fd(r.timestamp)}</td><td><b>${r.hiveNum}</b></td><td>${r.preparat || ''}</td><td>${r.uwagi || ''}</td>
       <td>
         <button onclick="editRecord('${r.id}', 'treatment')" class="btn-small">✏️</button>
         <button onclick="deleteRecord('${r.id}', 'treatment')" class="btn-small" style="background:red; color:white;">🗑️</button>
@@ -175,7 +184,7 @@ function renderGlobalTables() {
 
   if(tbodyIzo) tbodyIzo.innerHTML = state.izos.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).map(r => `
     <tr>
-      <td>${fd(r.timestamp)}</td><td><b>${r.hiveNum}</b></td><td>${r.izoType}</td><td>Ramka: ${r.ramka}</td>
+      <td>${fd(r.timestamp)}</td><td><b>${r.hiveNum}</b></td><td>${r.izoType || ''}</td><td>Ramka: ${r.ramka || ''}</td>
       <td style="color:#dc2626; font-weight:bold;">${r.kiedyLeczyc || ''}</td>
       <td>
         <button onclick="editRecord('${r.id}', 'izo')" class="btn-small">✏️</button>
@@ -262,27 +271,43 @@ function editRecord(id, type) {
   const tzOffset = new Date().getTimezoneOffset() * 60000;
   const localISOTime = (new Date(new Date(record.timestamp) - tzOffset)).toISOString().slice(0, 16);
   
-  document.getElementById(`input-${type === 'inspection' ? '' : type + '-'}date`).value = localISOTime;
+  const dateInput = document.getElementById(`input-${type === 'inspection' ? '' : type + '-'}date`);
+  if(dateInput) dateInput.value = localISOTime;
 
   if (type === 'inspection') {
-    document.querySelector(`input[name="matka"][value="${record.matka}"]`).checked = true;
-    document.querySelector(`input[name="jaja"][value="${record.jaja}"]`).checked = true;
-    document.querySelector(`input[name="pokarm"][value="${record.pokarm}"]`).checked = true;
-    document.getElementById('ramki-czerwiu').value = record.ramkiCzerwiu;
-    document.querySelector(`input[name="rodzina"][value="${record.rodzina}"]`).checked = true;
-    document.querySelector(`input[name="polkorpus"][value="${record.polkorpus}"]`).checked = true;
-    document.getElementById('input-dzialania').value = record.dzialania;
-    document.getElementById('input-przyszle-dzialania').value = record.przyszleDzialania;
+    const m = document.querySelector(`input[name="matka"][value="${record.matka}"]`);
+    if(m) m.checked = true;
+    const j = document.querySelector(`input[name="jaja"][value="${record.jaja}"]`);
+    if(j) j.checked = true;
+    const p = document.querySelector(`input[name="pokarm"][value="${record.pokarm}"]`);
+    if(p) p.checked = true;
+    const rc = document.getElementById('ramki-czerwiu');
+    if(rc) rc.value = record.ramkiCzerwiu;
+    const rodz = document.querySelector(`input[name="rodzina"][value="${record.rodzina}"]`);
+    if(rodz) rodz.checked = true;
+    const polk = document.querySelector(`input[name="polkorpus"][value="${record.polkorpus}"]`);
+    if(polk) polk.checked = true;
+    const dzial = document.getElementById('input-dzialania');
+    if(dzial) dzial.value = record.dzialania;
+    const przyszl = document.getElementById('input-przyszle-dzialania');
+    if(przyszl) przyszl.value = record.przyszleDzialania;
   } else if (type === 'feeding') {
-    document.getElementById('input-feeding-kg').value = record.kgCukru;
-    document.getElementById('input-feeding-notes').value = record.uwagi;
+    const kg = document.getElementById('input-feeding-kg');
+    if(kg) kg.value = record.kgCukru;
+    const uwagi = document.getElementById('input-feeding-notes');
+    if(uwagi) uwagi.value = record.uwagi;
   } else if (type === 'treatment') {
-    document.getElementById('input-treatment-preparat').value = record.preparat;
-    document.getElementById('input-treatment-notes').value = record.uwagi;
+    const prep = document.getElementById('input-treatment-preparat');
+    if(prep) prep.value = record.preparat;
+    const uwagi = document.getElementById('input-treatment-notes');
+    if(uwagi) uwagi.value = record.uwagi;
   } else if (type === 'izo') {
-    document.querySelector(`input[name="izoType"][value="${record.izoType}"]`).checked = true;
-    document.getElementById('input-izo-ramka').value = record.ramka;
-    document.getElementById('input-izo-kiedy-leczyc').value = record.kiedyLeczyc;
+    const izoT = document.querySelector(`input[name="izoType"][value="${record.izoType}"]`);
+    if(izoT) izoT.checked = true;
+    const ramka = document.getElementById('input-izo-ramka');
+    if(ramka) ramka.value = record.ramka;
+    const kiedy = document.getElementById('input-izo-kiedy-leczyc');
+    if(kiedy) kiedy.value = record.kiedyLeczyc;
   }
 }
 
@@ -307,21 +332,21 @@ function initForms() {
 
       if(type === 'inspection') {
         payload = { ...payload,
-          matka: document.querySelector('input[name="matka"]:checked').value,
-          jaja: document.querySelector('input[name="jaja"]:checked').value,
-          pokarm: document.querySelector('input[name="pokarm"]:checked').value,
-          ramkiCzerwiu: document.getElementById('ramki-czerwiu').value,
-          rodzina: document.querySelector('input[name="rodzina"]:checked').value,
-          polkorpus: document.querySelector('input[name="polkorpus"]:checked').value,
-          dzialania: document.getElementById('input-dzialania').value,
-          przyszleDzialania: document.getElementById('input-przyszle-dzialania').value
+          matka: document.querySelector('input[name="matka"]:checked')?.value || '',
+          jaja: document.querySelector('input[name="jaja"]:checked')?.value || '',
+          pokarm: document.querySelector('input[name="pokarm"]:checked')?.value || '',
+          ramkiCzerwiu: document.getElementById('ramki-czerwiu')?.value || '0',
+          rodzina: document.querySelector('input[name="rodzina"]:checked')?.value || '',
+          polkorpus: document.querySelector('input[name="polkorpus"]:checked')?.value || '0',
+          dzialania: document.getElementById('input-dzialania')?.value || '',
+          przyszleDzialania: document.getElementById('input-przyszle-dzialania')?.value || ''
         };
       } else if (type === 'feeding') {
-        payload = { ...payload, kgCukru: document.getElementById('input-feeding-kg').value, uwagi: document.getElementById('input-feeding-notes').value };
+        payload = { ...payload, kgCukru: document.getElementById('input-feeding-kg')?.value || '0', uwagi: document.getElementById('input-feeding-notes')?.value || '' };
       } else if (type === 'treatment') {
-        payload = { ...payload, preparat: document.getElementById('input-treatment-preparat').value, uwagi: document.getElementById('input-treatment-notes').value };
+        payload = { ...payload, preparat: document.getElementById('input-treatment-preparat')?.value || '', uwagi: document.getElementById('input-treatment-notes')?.value || '' };
       } else if (type === 'izo') {
-        payload = { ...payload, izoType: document.querySelector('input[name="izoType"]:checked').value, ramka: document.getElementById('input-izo-ramka').value, kiedyLeczyc: document.getElementById('input-izo-kiedy-leczyc').value };
+        payload = { ...payload, izoType: document.querySelector('input[name="izoType"]:checked')?.value || '', ramka: document.getElementById('input-izo-ramka')?.value || '1', kiedyLeczyc: document.getElementById('input-izo-kiedy-leczyc')?.value || '' };
       }
 
       const reqBody = isEdit ? { action: 'update', type: type, data: payload } : { type: type, ...payload };
