@@ -4,11 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Pasieka WLKP - Asystent Pasieki</title>
+
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#f59e0b">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
   <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -31,15 +34,15 @@
   </nav>
 
   <section id="tab-dom" class="tab-content active">
-    <div class="section-title title-dom"><h2>🏡 Pasieka DOM</h2></div>
+    <div class="section-title title-dom"><h2>🏡 Pasieka DOM</h2><span class="badge-count group-dom">Ule 1 – 6</span></div>
     <div id="hives-grid-dom" class="hives-grid hives-grid-dom"></div>
   </section>
   <section id="tab-zbior" class="tab-content">
-    <div class="section-title title-zbior"><h2>🌾 Pasieka ZBIÓR</h2></div>
+    <div class="section-title title-zbior"><h2>🌾 Pasieka ZBIÓR</h2><span class="badge-count group-zbior">Ule 7 – 12</span></div>
     <div id="hives-grid-zbior" class="hives-grid hives-grid-zbior"></div>
   </section>
   <section id="tab-las" class="tab-content">
-    <div class="section-title title-las"><h2>🌲 Pasieka LAS</h2></div>
+    <div class="section-title title-las"><h2>🌲 Pasieka LAS</h2><span class="badge-count group-las">Ule 13 – 18</span></div>
     <div id="hives-grid-las" class="hives-grid hives-grid-las"></div>
   </section>
   
@@ -81,7 +84,7 @@
             </div>
           </div>
           <div class="form-group">
-            <label class="group-label">Jaja/czerw:</label>
+            <label class="group-label">Jaja/młody czerw:</label>
             <div class="radio-group">
               <label><input type="radio" name="jaja" value="TAK" checked> 🥚 TAK</label>
               <label><input type="radio" name="jaja" value="NIE"> ❌ NIE</label>
@@ -106,9 +109,9 @@
         <div class="form-group margin-top-md">
           <label class="group-label">Siła Rodziny:</label>
           <div class="radio-group">
-            <label><input type="radio" name="rodzina" value="Bardzo Silna"> 💪 Silna</label>
-            <label><input type="radio" name="rodzina" value="Średnia" checked> 🙂 Średnia</label>
-            <label><input type="radio" name="rodzina" value="Słaba"> 📉 Słaba</label>
+            <label><input type="radio" name="rodzina" value="Bardzo Silna"> Bardzo Silna 💪</label>
+            <label><input type="radio" name="rodzina" value="Średnia" checked> Średnia 🙂</label>
+            <label><input type="radio" name="rodzina" value="Słaba"> Słaba 📉</label>
           </div>
         </div>
 
@@ -116,23 +119,23 @@
           <label class="group-label">Półkorpus (Nadstawki):</label>
           <div class="radio-group">
             <label><input type="radio" name="polkorpus" value="0" checked> 0</label>
-            <label><input type="radio" name="polkorpus" value="1"> 1</label>
-            <label><input type="radio" name="polkorpus" value="2"> 2</label>
-            <label><input type="radio" name="polkorpus" value="3"> 3</label>
+            <label><input type="radio" name="polkorpus" value="1"> 1 📦</label>
+            <label><input type="radio" name="polkorpus" value="2"> 2 📦📦</label>
+            <label><input type="radio" name="polkorpus" value="3"> 3 📦📦📦</label>
           </div>
         </div>
 
         <div class="form-group margin-top-md">
           <label for="input-dzialania">Wykonane Działania:</label>
-          <textarea id="input-dzialania" class="input-control" rows="2"></textarea>
+          <textarea id="input-dzialania" class="input-control" rows="2" placeholder="np. Dodano węzę"></textarea>
         </div>
 
         <div class="form-group margin-top-md">
           <label for="input-przyszle-dzialania">Przyszłe Działania / Plan:</label>
-          <textarea id="input-przyszle-dzialania" class="input-control" rows="2"></textarea>
+          <textarea id="input-przyszle-dzialania" class="input-control" rows="2" placeholder="np. Skontrolować za 7 dni"></textarea>
         </div>
 
-        <!-- Wielki i wyraźny przycisk zapisu -->
+        <!-- Wielki, wyrazisty przycisk -->
         <div class="form-actions margin-top-lg">
           <button type="submit" id="btn-submit-inspection" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: 3px solid #047857; font-size: 1.6rem; font-weight: 800; padding: 22px; width: 100%; border-radius: 12px; box-shadow: 0 8px 15px rgba(0,0,0,0.2); text-transform: uppercase;">
             💾 ZAPISZ PRZEGLĄD
@@ -201,11 +204,11 @@
           </div>
         </div>
         <div class="form-group margin-top-md">
-          <label for="input-treatment-preparat">Preparat:</label>
+          <label for="input-treatment-preparat" class="group-label">Preparat / Metoda:</label>
           <input type="text" id="input-treatment-preparat" class="input-control" required>
         </div>
         <div class="form-group margin-top-md">
-          <label for="input-treatment-notes">Uwagi:</label>
+          <label for="input-treatment-notes" class="group-label">Dawka / Uwagi:</label>
           <textarea id="input-treatment-notes" class="input-control" rows="3"></textarea>
         </div>
         <div class="form-actions margin-top-lg">
@@ -245,10 +248,9 @@
         </div>
         <div class="form-group margin-top-md">
           <label for="input-izo-ramka">Po której ramce:</label>
-          <input type="number" id="input-izo-ramka" class="input-control" min="1" required>
+          <input type="number" id="input-izo-ramka" class="input-control" min="1" max="25" required>
         </div>
         
-        <!-- Pole automatycznego wyliczania 24 dni -->
         <div class="form-group margin-top-md">
           <label for="input-izo-kiedy-leczyc" class="group-label" style="color:#dc2626; font-weight:bold;">Kiedy leczyć (+24 dni):</label>
           <input type="date" id="input-izo-kiedy-leczyc" class="input-control" readonly style="background-color:#fee2e2; color:#dc2626; font-weight:bold; border: 2px solid #ef4444;">
@@ -268,7 +270,7 @@
   <!-- ZAKŁADKA ARKUSZ / HISTORIA -->
   <section id="tab-sheet" class="tab-content">
     <div class="card sheet-card">
-      <div class="sheet-toolbar" style="display:flex; justify-content:space-between; align-items:center;">
+      <div class="sheet-toolbar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
         <div><h2>Arkusz Kalkulacyjny i Historia</h2></div>
         <div>
           <button id="btn-sync-now" class="btn-primary">🔄 Synchronizuj</button>
@@ -282,28 +284,30 @@
         <button id="btn-view-izos" class="btn-tab-toggle">🗃️ IZO</button>
       </div>
 
-      <!-- Tabele Historii -->
       <div id="wrapper-inspections-table" class="table-wrapper margin-top-md">
         <table class="data-table">
-          <thead><tr><th>Data</th><th>Ul</th><th>Działania</th><th>Plan</th><th>Akcje</th></tr></thead>
+          <thead><tr><th>Data i Czas</th><th>Ul</th><th>Rodzina</th><th>Matka</th><th>Jaja</th><th>Czerw</th><th>Pokarm</th><th>Nadstawki</th><th>Działania</th><th>Plan</th><th>Akcje</th></tr></thead>
           <tbody id="sheet-tbody"></tbody>
         </table>
       </div>
+
       <div id="wrapper-feedings-table" class="table-wrapper margin-top-md hidden">
         <table class="data-table">
           <thead><tr><th>Data</th><th>Ul</th><th>Ilość Cukru</th><th>Uwagi</th><th>Akcje</th></tr></thead>
           <tbody id="feedings-tbody"></tbody>
         </table>
       </div>
+
       <div id="wrapper-treatments-table" class="table-wrapper margin-top-md hidden">
         <table class="data-table">
           <thead><tr><th>Data</th><th>Ul</th><th>Preparat</th><th>Uwagi</th><th>Akcje</th></tr></thead>
           <tbody id="treatments-tbody"></tbody>
         </table>
       </div>
+
       <div id="wrapper-izos-table" class="table-wrapper margin-top-md hidden">
         <table class="data-table">
-          <thead><tr><th>Data</th><th>Ul</th><th>Operacja</th><th>Kiedy leczyć</th><th>Akcje</th></tr></thead>
+          <thead><tr><th>Data</th><th>Ul</th><th>Operacja</th><th>Ramka</th><th>Kiedy leczyć</th><th>Akcje</th></tr></thead>
           <tbody id="izos-tbody"></tbody>
         </table>
       </div>
