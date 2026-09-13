@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pasieka-v26';
+const CACHE_NAME = 'pasieka-v27';
 const ASSETS = [
   './',
   './index.html',
