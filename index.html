@@ -3,11 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pasieka WLKP - Asystent Pasieki</title>
+  <title>PASIEKA - Asystent Pasieki</title>
 
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#f59e0b">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
   <link rel="stylesheet" href="styles.css">
@@ -19,9 +20,13 @@
     <div class="logo-area">
       <span class="bee-icon">🐝</span>
       <div>
-        <h1>Pasieka WLKP</h1>
+        <h1>PASIEKA</h1>
         <p class="subtitle">Ewidencja 18 uli • 3 Pasieki</p>
       </div>
+    </div>
+    <div class="header-actions">
+      <div id="sync-status-badge" class="sync-badge synced">🟢 Połączono</div>
+      <button id="btn-header-sync" class="btn-small" style="background:#f59e0b; color:white; border:none; padding:6px 12px; font-weight:bold;">🔄 Synchro</button>
     </div>
   </header>
 
@@ -30,17 +35,19 @@
     <button class="tab-btn" data-tab="tab-zbior">🌾 ZBIÓR (7-12)</button>
     <button class="tab-btn" data-tab="tab-las">🌲 LAS (13-18)</button>
     <button class="tab-btn" data-tab="tab-todo" style="background:#059669; color:#fff;">📋 ZROBIĆ</button>
-    <button class="tab-btn" data-tab="tab-sheet">📊 Arkusz / Historia</button>
+    <button class="tab-btn" data-tab="tab-sheet">📊 Arkusz / Ustawienia</button>
   </nav>
 
   <section id="tab-dom" class="tab-content active">
     <div class="section-title title-dom"><h2>🏡 Pasieka DOM</h2><span class="badge-count group-dom">Ule 1 – 6</span></div>
     <div id="hives-grid-dom" class="hives-grid hives-grid-dom"></div>
   </section>
+  
   <section id="tab-zbior" class="tab-content">
     <div class="section-title title-zbior"><h2>🌾 Pasieka ZBIÓR</h2><span class="badge-count group-zbior">Ule 7 – 12</span></div>
     <div id="hives-grid-zbior" class="hives-grid hives-grid-zbior"></div>
   </section>
+  
   <section id="tab-las" class="tab-content">
     <div class="section-title title-las"><h2>🌲 Pasieka LAS</h2><span class="badge-count group-las">Ule 13 – 18</span></div>
     <div id="hives-grid-las" class="hives-grid hives-grid-las"></div>
@@ -270,15 +277,27 @@
     </div>
   </section>
 
-  <!-- ZAKŁADKA ARKUSZ / HISTORIA -->
+  <!-- ZAKŁADKA ARKUSZ / USTAWIENIA SYNCHRONIZACJI -->
   <section id="tab-sheet" class="tab-content">
     <div class="card sheet-card">
       <div class="sheet-toolbar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
-        <div><h2>Arkusz Kalkulacyjny i Historia</h2></div>
+        <div><h2>Arkusz Kalkulacyjny i Synchronizacja</h2></div>
         <div>
-          <button id="btn-sync-now" class="btn-primary">🔄 Synchronizuj</button>
+          <button id="btn-sync-now" class="btn-primary" style="padding:10px 20px;">🔄 Synchronizuj Teraz</button>
         </div>
       </div>
+
+      <!-- ZWINIĘTE USTAWIENIA WEBHOOKA GOOGLE SHEETS -->
+      <details class="webhook-details margin-top-sm">
+        <summary class="webhook-summary">⚙️ Ustawienia Połączenia Google Sheets (Webhook URL)</summary>
+        <div class="webhook-content">
+          <div style="display:flex; gap:8px; margin-top:8px;">
+            <input type="text" id="input-webhook-url" class="input-control" placeholder="Wklej link z Google Apps Script (https://script.google.com/.../exec)">
+            <button id="btn-save-webhook" class="btn-small" style="background:#d97706; color:white; border:none; padding:8px 16px; font-weight:bold;">Zapisz</button>
+          </div>
+          <small style="color:#78350f; margin-top:4px; display:block;">Adres wdrożonego skryptu Webhook z Google Sheets. Pozwala synchronizować dane dwukierunkowo.</small>
+        </div>
+      </details>
 
       <div class="tab-toggle-bar margin-top-md" style="display:flex; gap:10px;">
         <button id="btn-view-inspections" class="btn-tab-toggle active">📋 Przeglądy</button>
@@ -287,36 +306,101 @@
         <button id="btn-view-izos" class="btn-tab-toggle">🗃️ IZO</button>
       </div>
 
+      <!-- DZIAŁ PRZEGLĄDY -->
       <div id="wrapper-inspections-table" class="table-wrapper margin-top-md">
-        <table class="data-table">
-          <thead><tr><th>Data i Czas</th><th>Ul</th><th>Rodzina</th><th>Matka</th><th>Jaja</th><th>Czerw</th><th>Pokarm</th><th>Nadstawki</th><th>Działania</th><th>Plan</th><th>Akcje</th></tr></thead>
-          <tbody id="sheet-tbody"></tbody>
-        </table>
+        <h3 class="table-section-title">📋 Przeglądy Uli</h3>
+        <div class="table-scroll-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Data i Czas</th>
+                <th>Ul</th>
+                <th>Rodzina</th>
+                <th>Matka</th>
+                <th>Jaja</th>
+                <th>Czerw</th>
+                <th>Pokarm</th>
+                <th>Nadstawki</th>
+                <th>Wykonane Działania</th>
+                <th>Planowane Działania</th>
+                <th>Akcje</th>
+              </tr>
+            </thead>
+            <tbody id="sheet-tbody"></tbody>
+          </table>
+        </div>
       </div>
 
+      <!-- DZIAŁ KARMIENIE -->
       <div id="wrapper-feedings-table" class="table-wrapper margin-top-md hidden">
-        <table class="data-table">
-          <thead><tr><th>Data</th><th>Ul</th><th>Ilość Cukru</th><th>Uwagi</th><th>Akcje</th></tr></thead>
-          <tbody id="feedings-tbody"></tbody>
-        </table>
+        <h3 class="table-section-title">🍯 Karmienie Uli</h3>
+        <div class="table-scroll-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Data i Czas</th>
+                <th>Ul</th>
+                <th>Ilość Cukru (kg)</th>
+                <th>Uwagi / Syrop</th>
+                <th>Akcje</th>
+              </tr>
+            </thead>
+            <tbody id="feedings-tbody"></tbody>
+          </table>
+        </div>
       </div>
 
+      <!-- DZIAŁ LECZENIE -->
       <div id="wrapper-treatments-table" class="table-wrapper margin-top-md hidden">
-        <table class="data-table">
-          <thead><tr><th>Data</th><th>Ul</th><th>Preparat</th><th>Uwagi</th><th>Akcje</th></tr></thead>
-          <tbody id="treatments-tbody"></tbody>
-        </table>
+        <h3 class="table-section-title">💉 Leczenie Uli</h3>
+        <div class="table-scroll-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Data i Czas</th>
+                <th>Ul</th>
+                <th>Preparat / Metoda</th>
+                <th>Dawka / Uwagi</th>
+                <th>Akcje</th>
+              </tr>
+            </thead>
+            <tbody id="treatments-tbody"></tbody>
+          </table>
+        </div>
       </div>
 
+      <!-- DZIAŁ IZO -->
       <div id="wrapper-izos-table" class="table-wrapper margin-top-md hidden">
-        <table class="data-table">
-          <thead><tr><th>Data</th><th>Ul</th><th>Operacja</th><th>Ramka</th><th>Kiedy leczyć</th><th>Akcje</th></tr></thead>
-          <tbody id="izos-tbody"></tbody>
-        </table>
+        <h3 class="table-section-title">🗃️ Izolator (IZO)</h3>
+        <div class="table-scroll-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Data i Czas</th>
+                <th>Ul</th>
+                <th>Operacja (IZO)</th>
+                <th>Ramka</th>
+                <th>Kiedy Leczyć</th>
+                <th>Akcje</th>
+              </tr>
+            </thead>
+            <tbody id="izos-tbody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
   </section>
 
+  <!-- Rejestracja Service Workera -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then(reg => console.log('Service Worker zarejestrowany poprawnie.', reg))
+          .catch(err => console.error('Błąd rejestracji Service Workera.', err));
+      });
+    }
+  </script>
   <script src="app.js"></script>
 </body>
 </html>
