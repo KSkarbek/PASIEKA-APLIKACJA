@@ -1,6 +1,6 @@
 // PASIEKA - SILNIK APLIKACJI Z DWUKIERUNKOWĄ SYNCHRONIZACJĄ (OFFLINE-FIRST)
 
-const DEFAULT_WEBHOOK = ''; // Pozostaw puste, użytkownik wklei to w Ustawieniach
+const DEFAULT_WEBHOOK = ''; 
 let state = {
   inspections: [],
   feedings: [],
@@ -37,6 +37,43 @@ function isHiveNum(val) {
   const s = String(val).trim();
   const n = parseInt(s);
   return !isNaN(n) && n >= 1 && n <= 100 && !s.includes('-') && !s.includes(':') && !s.includes('T') && !s.includes('GMT') && !s.includes('.');
+}
+
+// --- NOWE FUNKCJE DO TWARDEGO FORMATOWANIA DAT ---
+function formatToPLDate(val) {
+  if (!val) return '';
+  let str = String(val).trim();
+  // Jeśli to już DD.MM.RRRR, zostaw jak jest
+  if (/^\d{2}\.\d{2}\.\d{4}$/.test(str)) return str;
+  
+  let d = new Date(str);
+  if (isNaN(d.getTime())) return str; // Jeśli to dziwny tekst, zostawiamy jako fallback
+  
+  let dd = String(d.getDate()).padStart(2, '0');
+  let mm = String(d.getMonth() + 1).padStart(2, '0');
+  let yyyy = d.getFullYear();
+  return `${dd}.${mm}.${yyyy}`;
+}
+
+function formatForDateInput(val) {
+  if (!val) return '';
+  let str = String(val).trim();
+  // Formularz HTML potrzebuje formatu RRRR-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+  
+  // Jeśli data jest zapisana jako DD.MM.RRRR, odwracamy ją
+  if (/^\d{2}\.\d{2}\.\d{4}$/.test(str)) {
+    let parts = str.split('.');
+    return `${parts[2]}-${parts[1]}-${parts[0]}`;
+  }
+  
+  let d = new Date(str);
+  if (isNaN(d.getTime())) return '';
+  
+  let dd = String(d.getDate()).padStart(2, '0');
+  let mm = String(d.getMonth() + 1).padStart(2, '0');
+  let yyyy = d.getFullYear();
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 function normalizeRecord(type, row) {
@@ -115,7 +152,8 @@ function normalizeRecord(type, row) {
     }
     normalized.izoType = String(izoTypeVal);
     normalized.ramka = String(rNum || '1');
-    normalized.kiedyLeczyc = row.kiedyLeczyc || '';
+    // WYMUSZENIE FORMATU KRÓTKIEGO DD.MM.RRRR
+    normalized.kiedyLeczyc = formatToPLDate(row.kiedyLeczyc);
   }
   return normalized;
 }
@@ -455,7 +493,12 @@ function initForms() {
       } else if (type === 'treatment') {
         payload = { ...payload, preparat: document.getElementById('input-treatment-preparat')?.value || '', uwagi: document.getElementById('input-treatment-notes')?.value || '' };
       } else if (type === 'izo') {
-        payload = { ...payload, izoType: document.querySelector('input[name="izoType"]:checked')?.value || '', ramka: document.getElementById('input-izo-ramka')?.value || '1', kiedyLeczyc: document.getElementById('input-izo-kiedy-leczyc')?.value || '' };
+        payload = { ...payload, 
+          izoType: document.querySelector('input[name="izoType"]:checked')?.value || '', 
+          ramka: document.getElementById('input-izo-ramka')?.value || '1', 
+          // WYMUSZENIE FORMATU PRZY ZAPISIE LOKALNYM
+          kiedyLeczyc: formatToPLDate(document.getElementById('input-izo-kiedy-leczyc')?.value) 
+        };
       }
 
       await saveLocalRecord(type, payload);
@@ -515,7 +558,9 @@ function editRecord(id, type) {
   } else if (type === 'izo') {
     const izoT = document.querySelector(`input[name="izoType"][value="${record.izoType}"]`); if (izoT) izoT.checked = true;
     const ramka = document.getElementById('input-izo-ramka'); if (ramka) ramka.value = record.ramka;
-    const kiedy = document.getElementById('input-izo-kiedy-leczyc'); if (kiedy) kiedy.value = record.kiedyLeczyc;
+    const kiedy = document.getElementById('input-izo-kiedy-leczyc'); 
+    // KONWERSJA POD FORMULARZ EDYCJI
+    if (kiedy) kiedy.value = formatForDateInput(record.kiedyLeczyc);
   }
 }
 
@@ -627,14 +672,18 @@ function openForm(type, hiveNum) {
   renderLocalHistory(type, hiveNum);
 }
 
+// ODPORNE WYLICZANIE DATY (IGNORUJE STREFY CZASOWE)
 function updateIzoLeczenieDate(sourceDateStr) {
   if (!sourceDateStr) return;
   let d = new Date(sourceDateStr);
-  if (!isNaN(d)) {
+  if (!isNaN(d.getTime())) {
     d.setDate(d.getDate() + 24);
     const kiedyLeczycEl = document.getElementById('input-izo-kiedy-leczyc');
     if (kiedyLeczycEl) {
-      kiedyLeczycEl.value = d.toISOString().split('T')[0];
+      let yyyy = d.getFullYear();
+      let mm = String(d.getMonth() + 1).padStart(2, '0');
+      let dd = String(d.getDate()).padStart(2, '0');
+      kiedyLeczycEl.value = `${yyyy}-${mm}-${dd}`;
     }
   }
 }
