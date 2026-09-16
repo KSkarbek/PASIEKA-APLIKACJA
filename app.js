@@ -39,16 +39,12 @@ function isHiveNum(val) {
   return !isNaN(n) && n >= 1 && n <= 100 && !s.includes('-') && !s.includes(':') && !s.includes('T') && !s.includes('GMT') && !s.includes('.');
 }
 
-// --- NOWE FUNKCJE DO TWARDEGO FORMATOWANIA DAT ---
 function formatToPLDate(val) {
   if (!val) return '';
   let str = String(val).trim();
-  // Jeśli to już DD.MM.RRRR, zostaw jak jest
   if (/^\d{2}\.\d{2}\.\d{4}$/.test(str)) return str;
-  
   let d = new Date(str);
-  if (isNaN(d.getTime())) return str; // Jeśli to dziwny tekst, zostawiamy jako fallback
-  
+  if (isNaN(d.getTime())) return str;
   let dd = String(d.getDate()).padStart(2, '0');
   let mm = String(d.getMonth() + 1).padStart(2, '0');
   let yyyy = d.getFullYear();
@@ -58,18 +54,13 @@ function formatToPLDate(val) {
 function formatForDateInput(val) {
   if (!val) return '';
   let str = String(val).trim();
-  // Formularz HTML potrzebuje formatu RRRR-MM-DD
   if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
-  
-  // Jeśli data jest zapisana jako DD.MM.RRRR, odwracamy ją
   if (/^\d{2}\.\d{2}\.\d{4}$/.test(str)) {
     let parts = str.split('.');
     return `${parts[2]}-${parts[1]}-${parts[0]}`;
   }
-  
   let d = new Date(str);
   if (isNaN(d.getTime())) return '';
-  
   let dd = String(d.getDate()).padStart(2, '0');
   let mm = String(d.getMonth() + 1).padStart(2, '0');
   let yyyy = d.getFullYear();
@@ -152,7 +143,6 @@ function normalizeRecord(type, row) {
     }
     normalized.izoType = String(izoTypeVal);
     normalized.ramka = String(rNum || '1');
-    // WYMUSZENIE FORMATU KRÓTKIEGO DD.MM.RRRR
     normalized.kiedyLeczyc = formatToPLDate(row.kiedyLeczyc);
   }
   return normalized;
@@ -496,13 +486,16 @@ function initForms() {
         payload = { ...payload, 
           izoType: document.querySelector('input[name="izoType"]:checked')?.value || '', 
           ramka: document.getElementById('input-izo-ramka')?.value || '1', 
-          // WYMUSZENIE FORMATU PRZY ZAPISIE LOKALNYM
           kiedyLeczyc: formatToPLDate(document.getElementById('input-izo-kiedy-leczyc')?.value) 
         };
       }
 
       await saveLocalRecord(type, payload);
       await loadStateFromLocal();
+      
+      // Aktualizacja historii widocznej pod formularzem po zapisie
+      renderLocalHistory(type, payload.hiveNum);
+      
       showToast(isEdit ? "Zaktualizowano wpis!" : "Zapisano wpis w pasiece!", "success");
       formEl.reset();
       delete formEl.dataset.editId;
@@ -517,10 +510,15 @@ async function deleteRecord(id, type) {
   const storeName = type + 's';
   const item = state[storeName].find(r => r.id === id);
   if (item) {
+    const currentHiveNum = item.hiveNum;
     item.syncStatus = 'pending_delete';
     item.updatedAt = Date.now().toString();
     await saveLocalRecord(type, item);
     await loadStateFromLocal();
+    
+    // Przebudowanie historii lokalnej na ekranie
+    renderLocalHistory(type, currentHiveNum);
+    
     showToast("Wpis oznaczony do usunięcia.", "warning");
     if (navigator.onLine) syncData(false);
   }
@@ -559,7 +557,6 @@ function editRecord(id, type) {
     const izoT = document.querySelector(`input[name="izoType"][value="${record.izoType}"]`); if (izoT) izoT.checked = true;
     const ramka = document.getElementById('input-izo-ramka'); if (ramka) ramka.value = record.ramka;
     const kiedy = document.getElementById('input-izo-kiedy-leczyc'); 
-    // KONWERSJA POD FORMULARZ EDYCJI
     if (kiedy) kiedy.value = formatForDateInput(record.kiedyLeczyc);
   }
 }
@@ -669,10 +666,10 @@ function openForm(type, hiveNum) {
   const btn = document.getElementById(`btn-submit-${type}`);
   if (btn) btn.innerHTML = btn.innerHTML.replace('ZAKTUALIZUJ', 'ZAPISZ');
 
+  // Rysowanie pełnej tabeli historii pod otwartym formularzem
   renderLocalHistory(type, hiveNum);
 }
 
-// ODPORNE WYLICZANIE DATY (IGNORUJE STREFY CZASOWE)
 function updateIzoLeczenieDate(sourceDateStr) {
   if (!sourceDateStr) return;
   let d = new Date(sourceDateStr);
@@ -743,27 +740,64 @@ function renderGlobalTables() {
     </tr>`).join('');
 }
 
+// NOWA FUNKCJA - Buduje identyczne tabele jak globalne, ale tylko dla wybranego ula pod formularzem
 function renderLocalHistory(type, hiveNum) {
   const container = document.getElementById(`local-${type}-history`);
   if (!container) return;
-  let data = state[type + 's'].filter(d => String(d.hiveNum) === String(hiveNum) && d.syncStatus !== 'pending_delete').sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-  if (data.length === 0) { container.innerHTML = "Brak wpisów..."; return; }
   
-  container.innerHTML = data.map(r => {
-    let details = '';
-    if (type === 'inspection') details = `Czerw: ${r.ramkiCzerwiu}, Plan: ${r.przyszleDzialania}`;
-    if (type === 'feeding') details = `Syrop: ${r.kgCukru}kg, Uwagi: ${r.uwagi}`;
-    if (type === 'treatment') details = `Lek: ${r.preparat}, Uwagi: ${r.uwagi}`;
-    if (type === 'izo') details = `Operacja: ${r.izoType}, Ramka: ${r.ramka}<br><span style="color:#dc2626; font-weight:bold;">Kiedy leczyć: ${r.kiedyLeczyc || '-'}</span>`;
-
-    return `<div style="border-bottom: 1px solid #ccc; padding: 8px 0; display:flex; justify-content:space-between; align-items:center;">
-      <div style="flex:1;"><b>${fd(r.timestamp)} ${r.syncStatus === 'pending_save' ? '🟠' : ''}</b><br><small>${details}</small></div>
-      <div>
-         <button onclick="editRecord('${r.id}', '${type}')" class="btn-small">✏️</button>
-         <button onclick="deleteRecord('${r.id}', '${type}')" class="btn-small" style="background:red; color:white;">🗑️</button>
-      </div>
-    </div>`;
-  }).join('');
+  let data = state[type + 's'].filter(d => String(d.hiveNum) === String(hiveNum) && d.syncStatus !== 'pending_delete').sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  
+  if (data.length === 0) { 
+    container.innerHTML = "<div style='padding:10px; color:#6b7280; font-style:italic;'>Brak wpisów dla tego ula.</div>"; 
+    return; 
+  }
+  
+  let tableHTML = `<div class="table-scroll-container"><table class="data-table" style="width:100%;"><thead><tr>`;
+  
+  if (type === 'inspection') {
+    tableHTML += `<th>Data</th><th>Rodzina</th><th>Matka</th><th>Czerw</th><th>Pokarm</th><th>Działania</th><th>Akcje</th></tr></thead><tbody>`;
+    tableHTML += data.map(r => `<tr>
+      <td>${fd(r.timestamp)} ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td>
+      <td>${r.rodzina || ''}</td><td>${r.matka || ''}</td><td>${r.ramkiCzerwiu || ''}</td>
+      <td>${r.pokarm || ''}</td><td>${r.dzialania || ''}</td>
+      <td>
+        <button onclick="editRecord('${r.id}', '${type}')" class="btn-small">✏️</button>
+        <button onclick="deleteRecord('${r.id}', '${type}')" class="btn-small" style="background:red; color:white;">🗑️</button>
+      </td></tr>`).join('');
+  } 
+  else if (type === 'feeding') {
+    tableHTML += `<th>Data</th><th>Cukier (kg)</th><th>Uwagi / Syrop</th><th>Akcje</th></tr></thead><tbody>`;
+    tableHTML += data.map(r => `<tr>
+      <td>${fd(r.timestamp)} ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td>
+      <td><b>${r.kgCukru || ''} kg</b></td><td>${r.uwagi || ''}</td>
+      <td>
+        <button onclick="editRecord('${r.id}', '${type}')" class="btn-small">✏️</button>
+        <button onclick="deleteRecord('${r.id}', '${type}')" class="btn-small" style="background:red; color:white;">🗑️</button>
+      </td></tr>`).join('');
+  } 
+  else if (type === 'treatment') {
+    tableHTML += `<th>Data</th><th>Preparat</th><th>Dawka / Uwagi</th><th>Akcje</th></tr></thead><tbody>`;
+    tableHTML += data.map(r => `<tr>
+      <td>${fd(r.timestamp)} ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td>
+      <td><b>${r.preparat || ''}</b></td><td>${r.uwagi || ''}</td>
+      <td>
+        <button onclick="editRecord('${r.id}', '${type}')" class="btn-small">✏️</button>
+        <button onclick="deleteRecord('${r.id}', '${type}')" class="btn-small" style="background:red; color:white;">🗑️</button>
+      </td></tr>`).join('');
+  } 
+  else if (type === 'izo') {
+    tableHTML += `<th>Data</th><th>Operacja (IZO)</th><th>Ramka</th><th>Kiedy Leczyć</th><th>Akcje</th></tr></thead><tbody>`;
+    tableHTML += data.map(r => `<tr>
+      <td>${fd(r.timestamp)} ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td>
+      <td><b>${r.izoType || ''}</b></td><td>${r.ramka || ''}</td><td style="color:#dc2626; font-weight:bold;">${r.kiedyLeczyc || ''}</td>
+      <td>
+        <button onclick="editRecord('${r.id}', '${type}')" class="btn-small">✏️</button>
+        <button onclick="deleteRecord('${r.id}', '${type}')" class="btn-small" style="background:red; color:white;">🗑️</button>
+      </td></tr>`).join('');
+  }
+  
+  tableHTML += `</tbody></table></div>`;
+  container.innerHTML = tableHTML;
 }
 
 function renderTodos() {
