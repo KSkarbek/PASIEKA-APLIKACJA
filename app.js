@@ -1,6 +1,6 @@
-// PASIEKA - SILNIK APLIKACJI Z DWUKIERUNKOWĄ SYNCHRONIZACJĄ (OFFLINE-FIRST)
+// PASIEKA - SILNIK APLIKACJI Z ZADANIAMI ZROBIĆ, DEDYKOWANĄ HISTORIĄ KATEGORII I OPISAMI MATEK
 
-const DEFAULT_WEBHOOK = 'https://script.google.com/macros/s/AKfycbyg2cKHE0MWudDJfZJ2FdLn6Q1pWiQzo9ckPkyNdzcwjOKtsXwUTJv5_BARof9LyoBzfg/exec'; 
+const DEFAULT_WEBHOOK = 'https://script.google.com/macros/s/AKfycbyg2cKHE0MWudDJfZJ2FdLn6Q1pWiQzo9ckPkyNdzcwjOKtsXwUTJv5_BARof9LyoBzfg/exec';
 let state = {
   inspections: [],
   feedings: [],
@@ -11,32 +11,11 @@ let state = {
 };
 
 const TYPES = ['inspection', 'feeding', 'treatment', 'izo'];
+let currentActiveHive = 1;
 
 function getWebhookUrl() {
   const custom = localStorage.getItem('gsheet_webhook');
   return (custom && custom.trim() !== '') ? custom.trim() : DEFAULT_WEBHOOK;
-}
-
-function isDateString(val) {
-  if (val === null || val === undefined || val === '') return false;
-  if (val instanceof Date) return true;
-  const s = String(val).trim();
-  if (/^\d{1,3}$/.test(s)) {
-    const num = Number(s);
-    if (num >= 1 && num <= 100) return false;
-  }
-  if (/\d{4}[-/.]\d{1,2}/.test(s) || /\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/.test(s) || s.includes('T') || s.includes('GMT')) {
-    return true;
-  }
-  const d = new Date(s);
-  return !isNaN(d.getTime());
-}
-
-function isHiveNum(val) {
-  if (val === null || val === undefined || val === '') return false;
-  const s = String(val).trim();
-  const n = parseInt(s);
-  return !isNaN(n) && n >= 1 && n <= 100 && !s.includes('-') && !s.includes(':') && !s.includes('T') && !s.includes('GMT') && !s.includes('.');
 }
 
 function formatToPLDate(val) {
@@ -67,6 +46,29 @@ function formatForDateInput(val) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+function fd(d) {
+  if (!d) return '';
+  return new Date(d).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function isDateString(val) {
+  if (val === null || val === undefined || val === '') return false;
+  if (val instanceof Date) return true;
+  const s = String(val).trim();
+  if (/^\d{1,3}$/.test(s)) {
+    const num = Number(s);
+    if (num >= 1 && num <= 100) return false;
+  }
+  return /\d{4}[-/.]\d{1,2}/.test(s) || /\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/.test(s) || s.includes('T') || s.includes('GMT');
+}
+
+function isHiveNum(val) {
+  if (val === null || val === undefined || val === '') return false;
+  const s = String(val).trim();
+  const n = parseInt(s);
+  return !isNaN(n) && n >= 1 && n <= 100 && !s.includes('-') && !s.includes(':') && !s.includes('.');
+}
+
 function normalizeRecord(type, row) {
   if (!row || typeof row !== 'object') return null;
   let id = row.id ? String(row.id).trim() : '';
@@ -89,16 +91,6 @@ function normalizeRecord(type, row) {
   } else if (isHiveNum(rawTime)) {
     hiveNum = parseInt(rawTime);
     timestampStr = rawHive;
-  } else {
-    let matchH = String(rawHive).match(/^\d+$/);
-    let matchT = String(rawTime).match(/^\d+$/);
-    if (matchH && parseInt(matchH[0]) <= 100) {
-      hiveNum = parseInt(matchH[0]);
-      timestampStr = rawTime;
-    } else if (matchT && parseInt(matchT[0]) <= 100) {
-      hiveNum = parseInt(matchT[0]);
-      timestampStr = rawHive;
-    }
   }
 
   if (!hiveNum || isNaN(hiveNum) || hiveNum < 1 || hiveNum > 100) return null;
@@ -123,21 +115,14 @@ function normalizeRecord(type, row) {
     normalized.dzialania = row.dzialania || '';
     normalized.przyszleDzialania = row.przyszleDzialania || '';
   } else if (type === 'feeding') {
-    let kg = row.kgCukru;
-    let uw = row.uwagi;
-    if (isNaN(parseFloat(kg)) && !isNaN(parseFloat(uw))) { kg = uw; uw = row.updatedAt || ''; }
-    normalized.kgCukru = String(kg || '0');
-    normalized.uwagi = String(uw || '');
+    normalized.kgCukru = String(row.kgCukru || '0');
+    normalized.uwagi = String(row.uwagi || '');
   } else if (type === 'treatment') {
     normalized.preparat = row.preparat || '';
     normalized.uwagi = row.uwagi || '';
   } else if (type === 'izo') {
-    let izoTypeVal = row.izoType || row.ramka || 'IZO-pocz';
-    if (String(izoTypeVal).includes('Ul')) izoTypeVal = row.ramka || 'IZO-pocz';
-    let rNum = row.ramka;
-    if (isNaN(parseInt(rNum)) && !isNaN(parseInt(row.kiedyLeczyc))) { rNum = row.kiedyLeczyc; }
-    normalized.izoType = String(izoTypeVal);
-    normalized.ramka = String(rNum || '1');
+    normalized.izoType = String(row.izoType || 'IZO-pocz');
+    normalized.ramka = String(row.ramka || '1');
     normalized.kiedyLeczyc = formatToPLDate(row.kiedyLeczyc);
   }
   return normalized;
@@ -147,23 +132,18 @@ const DB_NAME = 'PasiekaDB';
 const DB_VERSION = 1;
 let db = null;
 
-// INICJALIZACJA BAZY DANYCH OFFLINE
 function initDB() {
   return new Promise((resolve) => {
-    if (!window.indexedDB) {
-      console.warn("IndexedDB niedostępne, używam LocalStorage.");
-      resolve(null);
-      return;
-    }
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onerror = () => resolve(null);
-    request.onsuccess = (e) => { db = e.target.result; resolve(db); };
-    request.onupgradeneeded = (e) => {
+    if (!window.indexedDB) { resolve(null); return; }
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onerror = () => resolve(null);
+    req.onsuccess = (e) => { db = e.target.result; resolve(db); };
+    req.onupgradeneeded = (e) => {
       const dbInstance = e.target.result;
       TYPES.forEach(t => {
-        const storeName = t + 's';
-        if (!dbInstance.objectStoreNames.contains(storeName)) {
-          dbInstance.createObjectStore(storeName, { keyPath: 'id' });
+        const store = t + 's';
+        if (!dbInstance.objectStoreNames.contains(store)) {
+          dbInstance.createObjectStore(store, { keyPath: 'id' });
         }
       });
     };
@@ -234,15 +214,6 @@ function deleteFallbackLocalStorage(storeName, id) {
   return true;
 }
 
-// ZAPIS DANYCH MATKI NA KAFELKU
-window.saveQueen = function(hiveNum) {
-  const input = document.getElementById('queen-input-' + hiveNum);
-  if (input) {
-    localStorage.setItem('queen_' + hiveNum, input.value);
-    showToast('💾 Zapisano dane matki dla ula ' + hiveNum, 'success');
-  }
-};
-
 document.addEventListener('DOMContentLoaded', async () => {
   await initDB();
   await loadStateFromLocal();
@@ -262,7 +233,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const urlInput = document.getElementById('input-webhook-url');
       if (urlInput && urlInput.value) {
         localStorage.setItem('gsheet_webhook', urlInput.value.trim());
-        showToast("Zapisano nowy adres Webhooka!", "success");
+        showToast("Zapisano adres Webhooka!", "success");
         syncData(true);
       }
     });
@@ -290,7 +261,9 @@ async function loadStateFromLocal() {
 
 function updatePendingCount() {
   let count = 0;
-  TYPES.forEach(t => { state[t + 's'].forEach(r => { if (r.syncStatus && r.syncStatus !== 'synced') count++; }); });
+  TYPES.forEach(t => {
+    state[t + 's'].forEach(r => { if (r.syncStatus && r.syncStatus !== 'synced') count++; });
+  });
   state.syncPendingCount = count;
 }
 
@@ -302,7 +275,7 @@ function initNetworkListeners() {
   });
   window.addEventListener('offline', () => {
     updateSyncUI();
-    showToast("Tryb Offline 🟠 Brak połączenia z siecią.", "warning");
+    showToast("Tryb Offline 🟠 Brak sieci.", "warning");
   });
 }
 
@@ -328,11 +301,11 @@ async function syncData(userTriggered = false) {
   if (state.isSyncing) return;
   const webhookUrl = getWebhookUrl();
   if (!webhookUrl) {
-    if (userTriggered) showToast("Brak skonfigurowanego Webhooka w zakładce Ustawienia!", "warning");
+    if (userTriggered) showToast("Brak URL w Ustawieniach!", "warning");
     return;
   }
   if (!navigator.onLine) {
-    if (userTriggered) showToast("Brak połączenia z siecią. Spróbuj później.", "warning");
+    if (userTriggered) showToast("Brak połączenia z siecią.", "warning");
     return;
   }
   state.isSyncing = true;
@@ -341,51 +314,25 @@ async function syncData(userTriggered = false) {
   try {
     const changesToUpload = [];
     TYPES.forEach(t => {
-      const pluralType = t.endsWith('s') ? t : t + 's';
-      state[t + 's'].forEach(r => {
+      const plural = t + 's';
+      state[plural].forEach(r => {
         if (r.syncStatus && r.syncStatus !== 'synced') {
-          let timeVal = r.timestamp;
-          let hiveVal = String(r.hiveNum);
-          if (isDateString(hiveVal) && isHiveNum(timeVal)) {
-            const tmp = timeVal; timeVal = hiveVal; hiveVal = String(tmp);
-          }
           changesToUpload.push({
-            localType: t, type: pluralType, deleted: r.syncStatus === 'pending_delete',
-            data: { ...r, timestamp: timeVal, hiveNum: hiveVal, syncStatus: undefined }
+            localType: t,
+            type: plural,
+            deleted: r.syncStatus === 'pending_delete',
+            data: { ...r, syncStatus: undefined }
           });
         }
       });
     });
 
     if (changesToUpload.length > 0) {
-      let batchSuccess = false;
       try {
-        const batchResp = await fetch(webhookUrl, {
-          method: 'POST', body: JSON.stringify({ action: 'batch_upsert', changes: changesToUpload })
+        await fetch(webhookUrl, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'batch_upsert', changes: changesToUpload })
         });
-        const batchJson = await batchResp.json();
-        if (batchJson && (batchJson.status === 'success' || (batchJson.message && batchJson.message.includes('Zaktualizowano')))) {
-          batchSuccess = true;
-        }
-      } catch (errPost) { batchSuccess = false; }
-
-      if (!batchSuccess) {
-        for (let change of changesToUpload) {
-          try {
-            const reqBody = change.deleted ? { action: 'delete', type: change.type, id: change.data.id } : { type: change.type, ...change.data };
-            const singleResp = await fetch(webhookUrl, { method: 'POST', body: JSON.stringify(reqBody) });
-            const singleJson = await singleResp.json();
-            if (singleJson && (singleJson.status === 'success' || (singleJson.message && singleJson.message.includes('Zapisano')))) {
-              if (change.deleted) await deleteLocalRecordPermanent(change.localType, change.data.id);
-              else {
-                const storeName = change.localType + 's';
-                const rec = state[storeName].find(r => r.id === change.data.id);
-                if (rec) { rec.syncStatus = 'synced'; await saveLocalRecord(change.localType, rec); }
-              }
-            }
-          } catch (eSingle) { console.error("Błąd wysyłki pojedynczej:", eSingle); }
-        }
-      } else {
         for (let change of changesToUpload) {
           if (change.deleted) await deleteLocalRecordPermanent(change.localType, change.data.id);
           else {
@@ -394,6 +341,8 @@ async function syncData(userTriggered = false) {
             if (rec) { rec.syncStatus = 'synced'; await saveLocalRecord(change.localType, rec); }
           }
         }
+      } catch (errPost) {
+        console.error("Błąd batch POST:", errPost);
       }
     }
 
@@ -402,28 +351,16 @@ async function syncData(userTriggered = false) {
     if (res && typeof res === 'object') {
       for (let t of TYPES) {
         const storeName = t + 's';
-        const rawRemoteList = Array.isArray(res[storeName]) ? res[storeName] : (Array.isArray(res[t]) ? res[t] : []);
-        const remoteList = rawRemoteList.map(r => normalizeRecord(t, r)).filter(r => r !== null);
+        const rawRemote = Array.isArray(res[storeName]) ? res[storeName] : (Array.isArray(res[t]) ? res[t] : []);
+        const remoteList = rawRemote.map(r => normalizeRecord(t, r)).filter(r => r !== null);
         const localList = state[storeName] || [];
         const localMap = new Map(localList.map(item => [item.id, item]));
 
         for (let remoteItem of remoteList) {
           const localItem = localMap.get(remoteItem.id);
-          if (!localItem) {
+          if (!localItem || localItem.syncStatus === 'synced') {
             remoteItem.syncStatus = 'synced';
             await saveLocalRecord(t, remoteItem);
-          } else {
-            if (localItem.syncStatus !== 'synced') {
-              const localTime = parseInt(localItem.updatedAt || '0');
-              const remoteTime = parseInt(remoteItem.updatedAt || '0');
-              if (remoteTime > localTime) {
-                remoteItem.syncStatus = 'synced';
-                await saveLocalRecord(t, remoteItem);
-              }
-            } else {
-              remoteItem.syncStatus = 'synced';
-              await saveLocalRecord(t, remoteItem);
-            }
           }
         }
       }
@@ -431,6 +368,7 @@ async function syncData(userTriggered = false) {
       if (userTriggered) showToast("Synchronizacja ukończona pomyślnie! 🐝", "success");
     }
   } catch (err) {
+    console.error("Błąd synchronizacji:", err);
     if (userTriggered) showToast("Błąd synchronizacji z serwerem.", "error");
   } finally {
     state.isSyncing = false;
@@ -487,64 +425,17 @@ function initForms() {
 
       await saveLocalRecord(type, payload);
       await loadStateFromLocal();
-      showToast(isEdit ? "Zaktualizowano wpis!" : "Zapisano wpis w pasiece!", "success");
+      showToast(isEdit ? "Zaktualizowano wpis!" : "Zapisano wpis!", "success");
       formEl.reset();
       delete formEl.dataset.editId;
       if (btn) btn.innerHTML = btn.innerHTML.replace('ZAKTUALIZUJ', 'ZAPISZ');
+      
+      // Aktualizacja dedykowanej historii pod formularzem
+      renderGroupHistory(type, payload.hiveNum);
+
       if (navigator.onLine) syncData(false);
     });
   });
-}
-
-async function deleteRecord(id, type) {
-  if (!confirm("Na pewno usunąć ten wpis?")) return;
-  const storeName = type + 's';
-  const item = state[storeName].find(r => r.id === id);
-  if (item) {
-    item.syncStatus = 'pending_delete';
-    item.updatedAt = Date.now().toString();
-    await saveLocalRecord(type, item);
-    await loadStateFromLocal();
-    showToast("Wpis oznaczony do usunięcia.", "warning");
-    if (navigator.onLine) syncData(false);
-  }
-}
-
-function editRecord(id, type) {
-  const record = state[type + 's'].find(r => r.id === id);
-  if (!record) return;
-  openForm(type, record.hiveNum);
-  const form = document.getElementById(`${type}-form`);
-  if (form) form.dataset.editId = id;
-  const btn = document.getElementById(`btn-submit-${type}`);
-  if (btn) btn.innerHTML = btn.innerHTML.replace('ZAPISZ', 'ZAKTUALIZUJ');
-
-  const tzOffset = new Date().getTimezoneOffset() * 60000;
-  const localISOTime = (new Date(new Date(record.timestamp) - tzOffset)).toISOString().slice(0, 16);
-  const dateInput = document.getElementById(`input-${type === 'inspection' ? '' : type + '-'}date`);
-  if (dateInput) dateInput.value = localISOTime;
-
-  if (type === 'inspection') {
-    const m = document.querySelector(`input[name="matka"][value="${record.matka}"]`); if (m) m.checked = true;
-    const j = document.querySelector(`input[name="jaja"][value="${record.jaja}"]`); if (j) j.checked = true;
-    const p = document.querySelector(`input[name="pokarm"][value="${record.pokarm}"]`); if (p) p.checked = true;
-    const rc = document.getElementById('ramki-czerwiu'); if (rc) rc.value = record.ramkiCzerwiu;
-    const rodz = document.querySelector(`input[name="rodzina"][value="${record.rodzina}"]`); if (rodz) rodz.checked = true;
-    const polk = document.querySelector(`input[name="polkorpus"][value="${record.polkorpus}"]`); if (polk) polk.checked = true;
-    const dzial = document.getElementById('input-dzialania'); if (dzial) dzial.value = record.dzialania;
-    const przyszl = document.getElementById('input-przyszle-dzialania'); if (przyszl) przyszl.value = record.przyszleDzialania;
-  } else if (type === 'feeding') {
-    const kg = document.getElementById('input-feeding-kg'); if (kg) kg.value = record.kgCukru;
-    const uwagi = document.getElementById('input-feeding-notes'); if (uwagi) uwagi.value = record.uwagi;
-  } else if (type === 'treatment') {
-    const prep = document.getElementById('input-treatment-preparat'); if (prep) prep.value = record.preparat;
-    const uwagi = document.getElementById('input-treatment-notes'); if (uwagi) uwagi.value = record.uwagi;
-  } else if (type === 'izo') {
-    const izoT = document.querySelector(`input[name="izoType"][value="${record.izoType}"]`); if (izoT) izoT.checked = true;
-    const ramka = document.getElementById('input-izo-ramka'); if (ramka) ramka.value = record.ramka;
-    const kiedy = document.getElementById('input-izo-kiedy-leczyc'); 
-    if (kiedy) kiedy.value = formatForDateInput(record.kiedyLeczyc);
-  }
 }
 
 function initTabs() {
@@ -566,15 +457,23 @@ function initTabs() {
       btn.addEventListener('click', (e) => {
         document.querySelectorAll('.btn-tab-toggle').forEach(el => el.classList.remove('active'));
         e.currentTarget.classList.add('active');
-        
-        // PŁYNNE PRZEWIJANIE DO ODPOWIEDNIEJ TABELI W HISTORII
+        hTabs.forEach(t => {
+          const wrapper = document.getElementById(`wrapper-${t}-table`);
+          if (wrapper) wrapper.classList.add('hidden');
+        });
         const targetWrapper = document.getElementById(`wrapper-${type}-table`);
-        if (targetWrapper) {
-          targetWrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
+        if (targetWrapper) targetWrapper.classList.remove('hidden');
       });
     }
   });
+}
+
+function goBackToHives() {
+  let groupTab = 'tab-dom';
+  if (currentActiveHive >= 7 && currentActiveHive <= 12) groupTab = 'tab-zbior';
+  if (currentActiveHive >= 13 && currentActiveHive <= 18) groupTab = 'tab-las';
+  const targetBtn = document.querySelector(`[data-tab='${groupTab}']`);
+  if (targetBtn) targetBtn.click();
 }
 
 function initHives() {
@@ -583,22 +482,23 @@ function initHives() {
     if (!grid) return;
     grid.innerHTML = '';
     for (let i = start; i <= end; i++) {
-      const savedQueen = localStorage.getItem('queen_' + i) || '';
-      
+      const savedQueen = localStorage.getItem('hive_queen_desc_' + i) || '';
       grid.innerHTML += `
         <div class="hive-card">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <!-- MOCNO POGRUBIONY I WYRAŹNY NUMER ULA -->
-            <div class="hive-number" style="font-weight: 900; font-size: 2.8rem; color: #b45309; text-decoration: underline;">${i}</div>
-            
-            <!-- NOWE POLE DLA MATKI -->
-            <div style="display:flex; flex-direction:column; gap:4px; flex:1; margin-left:15px;">
-              <input type="text" id="queen-input-${i}" value="${savedQueen}" placeholder="Matka (np. Krainka)" style="padding:6px; font-size:0.9rem; border:1px solid #ccc; border-radius:4px; background:#fff9e6;">
-              <button onclick="saveQueen(${i})" class="btn-small" style="font-size:0.8rem; padding:4px; background:#d97706; color:white; border:none; border-radius:4px;">💾 Zapisz</button>
-            </div>
+          <div class="hive-header-row">
+            <div class="hive-number">UL ${i}</div>
           </div>
           
-          <div id="hive-desc-${i}" style="margin: 6px 0; min-height: 5rem;">Ładowanie danych...</div>
+          <div class="hive-queen-box">
+            <span style="font-size:0.75rem; font-weight:bold; color:#92400e;">👑 OPIS MATKI:</span>
+            <div class="queen-edit-row">
+              <input type="text" id="queen-desc-input-${i}" class="queen-input" value="${savedQueen}" placeholder="np. Krainka 2025, opalitka biała...">
+              <button class="queen-btn-save" onclick="saveQueenDescription(${i})">💾</button>
+            </div>
+          </div>
+
+          <div id="hive-desc-${i}" style="margin: 6px 0; min-height: 4.5rem;">Ładowanie danych...</div>
+          
           <div style="display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap;">
             <button class="btn-small" style="flex:1;" onclick="openForm('inspection', ${i})">📋 Przegląd</button>
             <button class="btn-small" style="flex:1;" onclick="openForm('feeding', ${i})">🍯 Pokarm</button>
@@ -613,6 +513,14 @@ function initHives() {
   renderGrid(13, 18, 'hives-grid-las');
 }
 
+function saveQueenDescription(hiveNum) {
+  const input = document.getElementById(`queen-desc-input-${hiveNum}`);
+  if (input) {
+    localStorage.setItem('hive_queen_desc_' + hiveNum, input.value.trim());
+    showToast(`Zapisano opis matki dla Ula ${hiveNum}`, "success");
+  }
+}
+
 function updateHiveCards() {
   for (let i = 1; i <= 18; i++) {
     let descDiv = document.getElementById(`hive-desc-${i}`);
@@ -624,26 +532,27 @@ function updateHiveCards() {
         <div class="hive-last-inspection">
           <div class="hive-last-header">
             <span class="hive-last-date">📅 ${fd(last.timestamp)}</span>
-            <span class="hive-last-rodzina">${last.rodzina || 'Rodzina OK'}</span>
+            <span class="hive-last-rodzina" style="color:#059669; font-weight:bold;">${last.rodzina || 'Rodzina OK'}</span>
           </div>
           <div class="hive-last-grid">
-            <div>👑 Matka status: <b>${last.matka || '-'}</b></div>
+            <div>👑 Widziana: <b>${last.matka || '-'}</b></div>
             <div>🥚 Jaja: <b>${last.jaja || '-'}</b></div>
             <div>🪮 Czerw: <b>${last.ramkiCzerwiu || '0'} r.</b></div>
             <div>🍯 Pokarm: <b>${last.pokarm || '-'}</b></div>
             <div>📦 Nadstawki: <b>${last.polkorpus || '0'}</b></div>
           </div>
-          ${last.dzialania ? `<div class="hive-last-dzialania">🛠️ <b>Działania:</b> ${last.dzialania}</div>` : ''}
-          ${last.przyszleDzialania && last.przyszleDzialania.trim() !== '0' && last.przyszleDzialania.trim().toLowerCase() !== 'brak' ? `<div class="hive-last-plan">📋 <b>Plan:</b> ${last.przyszleDzialania}</div>` : ''}
+          ${last.dzialania ? `<div style="margin-top:2px;">🛠️ <b>Działania:</b> ${last.dzialania}</div>` : ''}
+          ${last.przyszleDzialania && last.przyszleDzialania.trim() !== '0' && last.przyszleDzialania.trim().toLowerCase() !== 'brak' ? `<div style="color:#b45309; font-weight:bold; margin-top:2px;">📋 <b>Plan:</b> ${last.przyszleDzialania}</div>` : ''}
         </div>
       `;
     } else {
-      descDiv.innerHTML = `<span style="color:#9ca3af; font-style:italic; font-size:0.85rem;">Brak historii przeglądów</span>`;
+      descDiv.innerHTML = `<span style="color:#9ca3af; font-style:italic; font-size:0.85rem;">Brak zarejestrowanych przeglądów</span>`;
     }
   }
 }
 
 function openForm(type, hiveNum) {
+  currentActiveHive = hiveNum;
   document.querySelectorAll('.tab-btn, .tab-content').forEach(el => el.classList.remove('active'));
   let tabContent = document.getElementById(`tab-${type}`);
   if (tabContent) tabContent.classList.add('active');
@@ -653,7 +562,7 @@ function openForm(type, hiveNum) {
   const nowStr = now.toISOString().slice(0, 16);
 
   const selectHive = document.getElementById(`select-${type === 'inspection' ? '' : type + '-'}hive`);
-  if (selectHive) selectHive.innerHTML = `<option value="${hiveNum}">${hiveNum}</option>`;
+  if (selectHive) selectHive.innerHTML = `<option value="${hiveNum}">Ul ${hiveNum}</option>`;
   const inputDate = document.getElementById(`input-${type === 'inspection' ? '' : type + '-'}date`);
   if (inputDate) inputDate.value = nowStr;
 
@@ -664,7 +573,57 @@ function openForm(type, hiveNum) {
   const btn = document.getElementById(`btn-submit-${type}`);
   if (btn) btn.innerHTML = btn.innerHTML.replace('ZAKTUALIZUJ', 'ZAPISZ');
 
-  renderLocalHistory(type, hiveNum);
+  // Załadowanie precyzyjnej historii działań z danej grupy dla otwieranego ula
+  renderGroupHistory(type, hiveNum);
+}
+
+// Generuje dokładną historię z wybranej grupy w miejscu otwartego formularza
+function renderGroupHistory(type, hiveNum) {
+  const container = document.getElementById(`full-history-${type}`);
+  if (!container) return;
+
+  let historyList = state[type + 's']
+    .filter(r => String(r.hiveNum) === String(hiveNum) && r.syncStatus !== 'pending_delete')
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+  if (historyList.length === 0) {
+    container.innerHTML = `<div style="color:#6b7280; font-style:italic; padding:6px;">Brak wcześniejszych wpisów dla tego ula w tej kategorii.</div>`;
+    return;
+  }
+
+  let html = historyList.map(r => {
+    let badge = '';
+    let details = '';
+    
+    if (type === 'inspection') {
+      badge = '📋 PRZEGLĄD';
+      details = `👑 Matka: <b>${r.matka || '-'}</b>, 🥚 Jaja: <b>${r.jaja || '-'}</b>, 🪮 Czerw: <b>${r.ramkiCzerwiu || '0'} r.</b>, 🍯 Pokarm: <b>${r.pokarm || '-'}</b>, 📦 Nadstawki: <b>${r.polkorpus || '0'}</b><br>🛠️ Działania: ${r.dzialania || '-'}<br>📋 Plan: <b style="color:#b45309;">${r.przyszleDzialania || '-'}</b>`;
+    } else if (type === 'feeding') {
+      badge = '🍯 KARMIENIE';
+      details = `Podaż: <b>${r.kgCukru} kg</b> cukru/syropu<br>Uwagi: ${r.uwagi || '-'}`;
+    } else if (type === 'treatment') {
+      badge = '💉 LECZENIE';
+      details = `Preparat: <b>${r.preparat}</b><br>Dawka / Notatki: ${r.uwagi || '-'}`;
+    } else if (type === 'izo') {
+      badge = '🗃️ IZOLATOR';
+      details = `Operacja: <b>${r.izoType}</b>, Po ramce: <b>${r.ramka}</b><br>Kiedy leczyć (+24 dni): <b style="color:#dc2626;">${r.kiedyLeczyc || '-'}</b>`;
+    }
+
+    return `
+      <div class="history-entry-card type-${type}">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+          <span style="font-weight:bold; font-size:0.8rem; background:#fff; padding:2px 6px; border-radius:4px; border:1px solid #e5e7eb;">${badge}</span>
+          <span style="color:#4b5563; font-weight:600; font-size:0.85rem;">📅 ${fd(r.timestamp)}</span>
+        </div>
+        <div style="margin-top: 4px; font-size: 0.9rem;">${details}</div>
+        <div style="text-align: right; margin-top: 8px;">
+           <button onclick="deleteRecord('${r.id}', '${type}')" class="btn-small" style="background:#fee2e2; color:#b91c1c; border:none; padding:4px 8px; cursor:pointer; font-weight:bold;">🗑️ Usuń</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  container.innerHTML = html;
 }
 
 function updateIzoLeczenieDate(sourceDateStr) {
@@ -674,17 +633,65 @@ function updateIzoLeczenieDate(sourceDateStr) {
     d.setDate(d.getDate() + 24);
     const kiedyLeczycEl = document.getElementById('input-izo-kiedy-leczyc');
     if (kiedyLeczycEl) {
-      let yyyy = d.getFullYear();
-      let mm = String(d.getMonth() + 1).padStart(2, '0');
       let dd = String(d.getDate()).padStart(2, '0');
-      kiedyLeczycEl.value = `${yyyy}-${mm}-${dd}`;
+      let mm = String(d.getMonth() + 1).padStart(2, '0');
+      let yyyy = d.getFullYear();
+      kiedyLeczycEl.value = `${dd}.${mm}.${yyyy}`;
     }
   }
 }
 
-function fd(d) {
-  if (!d) return '';
-  return new Date(d).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' });
+function renderTodos() {
+  const ul = document.getElementById('todo-list');
+  if (!ul) return;
+
+  let rawList = state.inspections.filter(i => {
+    if (i.syncStatus === 'pending_delete') return false;
+    const val = (i.przyszleDzialania || '').trim();
+    const lower = val.toLowerCase();
+    return val.length > 0 && lower !== '0' && lower !== 'brak' && lower !== 'brak planów' && lower !== 'brak planu' && lower !== 'brak uwag' && lower !== 'brak dzialan' && lower !== 'brak działań' && lower !== 'nie' && lower !== '-';
+  });
+
+  if (rawList.length === 0) {
+    ul.innerHTML = '<li style="padding:16px; color:#6b7280; font-style:italic;">Brak zaplanowanych zadań z przeglądów.</li>';
+    return;
+  }
+
+  let processed = rawList.map(t => {
+    const isDone = localStorage.getItem('todo_done_' + t.id) === 'true';
+    return { ...t, isDone: isDone };
+  });
+
+  processed.sort((a, b) => {
+    if (a.isDone === b.isDone) {
+      return new Date(b.timestamp) - new Date(a.timestamp);
+    }
+    return a.isDone ? 1 : -1;
+  });
+
+  ul.innerHTML = processed.map(t => {
+    const isChecked = t.isDone;
+    const xContent = isChecked ? 'X' : '&nbsp;';
+    const itemClass = isChecked ? 'todo-item completed' : 'todo-item';
+
+    return `
+      <li class="${itemClass}">
+        <div class="todo-checkbox-box" onclick="toggleTodoBox('${t.id}')" title="Kliknij by zmienić stan">${xContent}</div>
+        <div class="todo-text" style="flex:1;">
+          <span style="background:#fef3c7; color:#92400e; padding:2px 8px; border-radius:6px; font-weight:bold; font-size:0.85rem; margin-right:6px;">UL ${t.hiveNum}</span>
+          <small style="color:#6b7280; margin-right:8px;">(${fd(t.timestamp)})</small>
+          <span style="font-weight:600; font-size:0.95rem;">${t.przyszleDzialania}</span>
+        </div>
+        <button onclick="openForm('inspection', ${t.hiveNum})" class="btn-small">Otwórz Ul</button>
+      </li>
+    `;
+  }).join('');
+}
+
+function toggleTodoBox(id) {
+  const current = localStorage.getItem('todo_done_' + id) === 'true';
+  localStorage.setItem('todo_done_' + id, (!current).toString());
+  renderTodos();
 }
 
 function renderGlobalTables() {
@@ -703,8 +710,7 @@ function renderGlobalTables() {
       <td>${fd(r.timestamp)} ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td><td><b>${r.hiveNum}</b></td><td>${r.rodzina || ''}</td><td>${r.matka || ''}</td><td>${r.jaja || ''}</td>
       <td>${r.ramkiCzerwiu || ''}</td><td>${r.pokarm || ''}</td><td>${r.polkorpus || ''}</td><td>${r.dzialania || ''}</td><td>${r.przyszleDzialania || ''}</td>
       <td>
-        <button onclick="editRecord('${r.id}', 'inspection')" class="btn-small">✏️</button>
-        <button onclick="deleteRecord('${r.id}', 'inspection')" class="btn-small" style="background:red; color:white;">🗑️</button>
+        <button onclick="deleteRecord('${r.id}', 'inspection')" class="btn-small" style="background:#fee2e2; color:#b91c1c;">🗑️</button>
       </td>
     </tr>`).join('');
 
@@ -712,8 +718,7 @@ function renderGlobalTables() {
     <tr>
       <td>${fd(r.timestamp)} ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td><td><b>${r.hiveNum}</b></td><td>${r.kgCukru || ''} kg</td><td>${r.uwagi || ''}</td>
       <td>
-        <button onclick="editRecord('${r.id}', 'feeding')" class="btn-small">✏️</button>
-        <button onclick="deleteRecord('${r.id}', 'feeding')" class="btn-small" style="background:red; color:white;">🗑️</button>
+        <button onclick="deleteRecord('${r.id}', 'feeding')" class="btn-small" style="background:#fee2e2; color:#b91c1c;">🗑️</button>
       </td>
     </tr>`).join('');
 
@@ -721,8 +726,7 @@ function renderGlobalTables() {
     <tr>
       <td>${fd(r.timestamp)} ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td><td><b>${r.hiveNum}</b></td><td>${r.preparat || ''}</td><td>${r.uwagi || ''}</td>
       <td>
-        <button onclick="editRecord('${r.id}', 'treatment')" class="btn-small">✏️</button>
-        <button onclick="deleteRecord('${r.id}', 'treatment')" class="btn-small" style="background:red; color:white;">🗑️</button>
+        <button onclick="deleteRecord('${r.id}', 'treatment')" class="btn-small" style="background:#fee2e2; color:#b91c1c;">🗑️</button>
       </td>
     </tr>`).join('');
 
@@ -731,66 +735,29 @@ function renderGlobalTables() {
       <td>${fd(r.timestamp)} ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td><td><b>${r.hiveNum}</b></td><td>${r.izoType || ''}</td><td>Ramka: ${r.ramka || ''}</td>
       <td style="color:#dc2626; font-weight:bold;">${r.kiedyLeczyc || ''}</td>
       <td>
-        <button onclick="editRecord('${r.id}', 'izo')" class="btn-small">✏️</button>
-        <button onclick="deleteRecord('${r.id}', 'izo')" class="btn-small" style="background:red; color:white;">🗑️</button>
+        <button onclick="deleteRecord('${r.id}', 'izo')" class="btn-small" style="background:#fee2e2; color:#b91c1c;">🗑️</button>
       </td>
     </tr>`).join('');
 }
 
-function renderLocalHistory(type, hiveNum) {
-  const container = document.getElementById(`local-${type}-history`);
-  if (!container) return;
-  let data = state[type + 's'].filter(d => String(d.hiveNum) === String(hiveNum) && d.syncStatus !== 'pending_delete').sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-  if (data.length === 0) { container.innerHTML = "Brak wpisów..."; return; }
-  
-  container.innerHTML = data.map(r => {
-    let details = '';
-    if (type === 'inspection') details = `Czerw: ${r.ramkiCzerwiu}, Plan: ${r.przyszleDzialania}`;
-    if (type === 'feeding') details = `Syrop: ${r.kgCukru}kg, Uwagi: ${r.uwagi}`;
-    if (type === 'treatment') details = `Lek: ${r.preparat}, Uwagi: ${r.uwagi}`;
-    if (type === 'izo') details = `Operacja: ${r.izoType}, Ramka: ${r.ramka}<br><span style="color:#dc2626; font-weight:bold;">Kiedy leczyć: ${r.kiedyLeczyc || '-'}</span>`;
-
-    return `<div style="border-bottom: 1px solid #ccc; padding: 8px 0; display:flex; justify-content:space-between; align-items:center;">
-      <div style="flex:1;"><b>${fd(r.timestamp)} ${r.syncStatus === 'pending_save' ? '🟠' : ''}</b><br><small>${details}</small></div>
-      <div>
-         <button onclick="editRecord('${r.id}', '${type}')" class="btn-small">✏️</button>
-         <button onclick="deleteRecord('${r.id}', '${type}')" class="btn-small" style="background:red; color:white;">🗑️</button>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function renderTodos() {
-  const ul = document.getElementById('todo-list');
-  if (!ul) return;
-  let todos = state.inspections.filter(i => {
-    if (i.syncStatus === 'pending_delete') return false;
-    const val = (i.przyszleDzialania || '').trim();
-    const lower = val.toLowerCase();
-    return val.length > 0 && lower !== '0' && lower !== 'brak' && lower !== 'brak planów' && lower !== 'brak planu' && lower !== 'brak uwag' && lower !== 'brak dzialan' && lower !== 'brak działań' && lower !== 'nie' && lower !== '-';
-  }).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
-  if (todos.length === 0) { ul.innerHTML = '<li style="padding:16px; color:#6b7280; font-style:italic;">Brak zaplanowanych zadań.</li>'; return; }
-
-  ul.innerHTML = todos.map(t => {
-    const isDone = localStorage.getItem('todo_done_' + t.id) === 'true';
-    const checked = isDone ? 'checked' : '';
-    const strike = isDone ? 'text-decoration: line-through; color: #9ca3af;' : '';
-    return `<li style="padding: 12px 14px; border-bottom: 1px solid #e5e7eb; display:flex; align-items:center; gap:12px; background:#f9fafb; margin-bottom:6px; border-radius:8px;">
-      <input type="checkbox" onchange="toggleTodo('${t.id}', this.checked)" ${checked} style="width:20px; height:20px; cursor:pointer;">
-      <div style="flex:1; ${strike}">
-        <span style="background:#fef3c7; color:#92400e; padding:2px 8px; border-radius:6px; font-weight:bold; font-size:0.85rem; margin-right:6px;">Ul ${t.hiveNum}</span>
-        <small style="color:#6b7280; margin-right:8px;">(${fd(t.timestamp)})</small>
-        <span style="font-weight:600;">${t.przyszleDzialania}</span>
-      </div>
-      <button onclick="editRecord('${t.id}', 'inspection')" class="btn-small">✏️ Edytuj wpis</button>
-    </li>`;
-  }).join('');
-}
-
-function toggleTodo(id, isDone) {
-  localStorage.setItem('todo_done_' + id, isDone);
-  renderTodos();
+async function deleteRecord(id, type) {
+  if (!confirm("Na pewno usunąć ten wpis?")) return;
+  const storeName = type + 's';
+  const item = state[storeName].find(r => r.id === id);
+  if (item) {
+    item.syncStatus = 'pending_delete';
+    item.updatedAt = Date.now().toString();
+    await saveLocalRecord(type, item);
+    await loadStateFromLocal();
+    showToast("Wpis usunięty.", "warning");
+    
+    // Odświeżenie historii pod formularzem po usunięciu wpisu
+    if (item.hiveNum) {
+      renderGroupHistory(type, item.hiveNum);
+    }
+    
+    if (navigator.onLine) syncData(false);
+  }
 }
 
 function showToast(msg, type = 'info') {
@@ -806,7 +773,7 @@ function showToast(msg, type = 'info') {
   toast.innerText = msg;
   toastContainer.appendChild(toast);
   setTimeout(() => {
-    toast.classList.add('fade-out');
+    toast.style.opacity = '0';
     setTimeout(() => toast.remove(), 400);
-  }, 3000);
+  }, 2800);
 }
