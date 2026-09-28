@@ -125,10 +125,7 @@ function normalizeRecord(type, row) {
   } else if (type === 'feeding') {
     let kg = row.kgCukru;
     let uw = row.uwagi;
-    if (isNaN(parseFloat(kg)) && !isNaN(parseFloat(uw))) {
-      kg = uw;
-      uw = row.updatedAt || '';
-    }
+    if (isNaN(parseFloat(kg)) && !isNaN(parseFloat(uw))) { kg = uw; uw = row.updatedAt || ''; }
     normalized.kgCukru = String(kg || '0');
     normalized.uwagi = String(uw || '');
   } else if (type === 'treatment') {
@@ -138,9 +135,7 @@ function normalizeRecord(type, row) {
     let izoTypeVal = row.izoType || row.ramka || 'IZO-pocz';
     if (String(izoTypeVal).includes('Ul')) izoTypeVal = row.ramka || 'IZO-pocz';
     let rNum = row.ramka;
-    if (isNaN(parseInt(rNum)) && !isNaN(parseInt(row.kiedyLeczyc))) {
-      rNum = row.kiedyLeczyc;
-    }
+    if (isNaN(parseInt(rNum)) && !isNaN(parseInt(row.kiedyLeczyc))) { rNum = row.kiedyLeczyc; }
     normalized.izoType = String(izoTypeVal);
     normalized.ramka = String(rNum || '1');
     normalized.kiedyLeczyc = formatToPLDate(row.kiedyLeczyc);
@@ -152,6 +147,7 @@ const DB_NAME = 'PasiekaDB';
 const DB_VERSION = 1;
 let db = null;
 
+// INICJALIZACJA BAZY DANYCH OFFLINE
 function initDB() {
   return new Promise((resolve) => {
     if (!window.indexedDB) {
@@ -238,6 +234,15 @@ function deleteFallbackLocalStorage(storeName, id) {
   return true;
 }
 
+// ZAPIS DANYCH MATKI NA KAFELKU
+window.saveQueen = function(hiveNum) {
+  const input = document.getElementById('queen-input-' + hiveNum);
+  if (input) {
+    localStorage.setItem('queen_' + hiveNum, input.value);
+    showToast('💾 Zapisano dane matki dla ula ' + hiveNum, 'success');
+  }
+};
+
 document.addEventListener('DOMContentLoaded', async () => {
   await initDB();
   await loadStateFromLocal();
@@ -285,9 +290,7 @@ async function loadStateFromLocal() {
 
 function updatePendingCount() {
   let count = 0;
-  TYPES.forEach(t => {
-    state[t + 's'].forEach(r => { if (r.syncStatus && r.syncStatus !== 'synced') count++; });
-  });
+  TYPES.forEach(t => { state[t + 's'].forEach(r => { if (r.syncStatus && r.syncStatus !== 'synced') count++; }); });
   state.syncPendingCount = count;
 }
 
@@ -344,14 +347,10 @@ async function syncData(userTriggered = false) {
           let timeVal = r.timestamp;
           let hiveVal = String(r.hiveNum);
           if (isDateString(hiveVal) && isHiveNum(timeVal)) {
-            const tmp = timeVal;
-            timeVal = hiveVal;
-            hiveVal = String(tmp);
+            const tmp = timeVal; timeVal = hiveVal; hiveVal = String(tmp);
           }
           changesToUpload.push({
-            localType: t,
-            type: pluralType,
-            deleted: r.syncStatus === 'pending_delete',
+            localType: t, type: pluralType, deleted: r.syncStatus === 'pending_delete',
             data: { ...r, timestamp: timeVal, hiveNum: hiveVal, syncStatus: undefined }
           });
         }
@@ -362,8 +361,7 @@ async function syncData(userTriggered = false) {
       let batchSuccess = false;
       try {
         const batchResp = await fetch(webhookUrl, {
-          method: 'POST',
-          body: JSON.stringify({ action: 'batch_upsert', changes: changesToUpload })
+          method: 'POST', body: JSON.stringify({ action: 'batch_upsert', changes: changesToUpload })
         });
         const batchJson = await batchResp.json();
         if (batchJson && (batchJson.status === 'success' || (batchJson.message && batchJson.message.includes('Zaktualizowano')))) {
@@ -374,9 +372,7 @@ async function syncData(userTriggered = false) {
       if (!batchSuccess) {
         for (let change of changesToUpload) {
           try {
-            const reqBody = change.deleted 
-              ? { action: 'delete', type: change.type, id: change.data.id }
-              : { type: change.type, ...change.data };
+            const reqBody = change.deleted ? { action: 'delete', type: change.type, id: change.data.id } : { type: change.type, ...change.data };
             const singleResp = await fetch(webhookUrl, { method: 'POST', body: JSON.stringify(reqBody) });
             const singleJson = await singleResp.json();
             if (singleJson && (singleJson.status === 'success' || (singleJson.message && singleJson.message.includes('Zapisano')))) {
@@ -435,7 +431,6 @@ async function syncData(userTriggered = false) {
       if (userTriggered) showToast("Synchronizacja ukończona pomyślnie! 🐝", "success");
     }
   } catch (err) {
-    console.error("Błąd synchronizacji:", err);
     if (userTriggered) showToast("Błąd synchronizacji z serwerem.", "error");
   } finally {
     state.isSyncing = false;
@@ -492,10 +487,6 @@ function initForms() {
 
       await saveLocalRecord(type, payload);
       await loadStateFromLocal();
-      
-      // Aktualizacja historii widocznej pod formularzem po zapisie
-      renderLocalHistory(type, payload.hiveNum);
-      
       showToast(isEdit ? "Zaktualizowano wpis!" : "Zapisano wpis w pasiece!", "success");
       formEl.reset();
       delete formEl.dataset.editId;
@@ -510,15 +501,10 @@ async function deleteRecord(id, type) {
   const storeName = type + 's';
   const item = state[storeName].find(r => r.id === id);
   if (item) {
-    const currentHiveNum = item.hiveNum;
     item.syncStatus = 'pending_delete';
     item.updatedAt = Date.now().toString();
     await saveLocalRecord(type, item);
     await loadStateFromLocal();
-    
-    // Przebudowanie historii lokalnej na ekranie
-    renderLocalHistory(type, currentHiveNum);
-    
     showToast("Wpis oznaczony do usunięcia.", "warning");
     if (navigator.onLine) syncData(false);
   }
@@ -580,12 +566,12 @@ function initTabs() {
       btn.addEventListener('click', (e) => {
         document.querySelectorAll('.btn-tab-toggle').forEach(el => el.classList.remove('active'));
         e.currentTarget.classList.add('active');
-        hTabs.forEach(t => {
-          const wrapper = document.getElementById(`wrapper-${t}-table`);
-          if (wrapper) wrapper.classList.add('hidden');
-        });
+        
+        // PŁYNNE PRZEWIJANIE DO ODPOWIEDNIEJ TABELI W HISTORII
         const targetWrapper = document.getElementById(`wrapper-${type}-table`);
-        if (targetWrapper) targetWrapper.classList.remove('hidden');
+        if (targetWrapper) {
+          targetWrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
       });
     }
   });
@@ -597,9 +583,21 @@ function initHives() {
     if (!grid) return;
     grid.innerHTML = '';
     for (let i = start; i <= end; i++) {
+      const savedQueen = localStorage.getItem('queen_' + i) || '';
+      
       grid.innerHTML += `
         <div class="hive-card">
-          <div class="hive-number">${i}</div>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <!-- MOCNO POGRUBIONY I WYRAŹNY NUMER ULA -->
+            <div class="hive-number" style="font-weight: 900; font-size: 2.8rem; color: #b45309; text-decoration: underline;">${i}</div>
+            
+            <!-- NOWE POLE DLA MATKI -->
+            <div style="display:flex; flex-direction:column; gap:4px; flex:1; margin-left:15px;">
+              <input type="text" id="queen-input-${i}" value="${savedQueen}" placeholder="Matka (np. Krainka)" style="padding:6px; font-size:0.9rem; border:1px solid #ccc; border-radius:4px; background:#fff9e6;">
+              <button onclick="saveQueen(${i})" class="btn-small" style="font-size:0.8rem; padding:4px; background:#d97706; color:white; border:none; border-radius:4px;">💾 Zapisz</button>
+            </div>
+          </div>
+          
           <div id="hive-desc-${i}" style="margin: 6px 0; min-height: 5rem;">Ładowanie danych...</div>
           <div style="display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap;">
             <button class="btn-small" style="flex:1;" onclick="openForm('inspection', ${i})">📋 Przegląd</button>
@@ -629,7 +627,7 @@ function updateHiveCards() {
             <span class="hive-last-rodzina">${last.rodzina || 'Rodzina OK'}</span>
           </div>
           <div class="hive-last-grid">
-            <div>👑 Matka: <b>${last.matka || '-'}</b></div>
+            <div>👑 Matka status: <b>${last.matka || '-'}</b></div>
             <div>🥚 Jaja: <b>${last.jaja || '-'}</b></div>
             <div>🪮 Czerw: <b>${last.ramkiCzerwiu || '0'} r.</b></div>
             <div>🍯 Pokarm: <b>${last.pokarm || '-'}</b></div>
@@ -666,7 +664,6 @@ function openForm(type, hiveNum) {
   const btn = document.getElementById(`btn-submit-${type}`);
   if (btn) btn.innerHTML = btn.innerHTML.replace('ZAKTUALIZUJ', 'ZAPISZ');
 
-  // Rysowanie pełnej tabeli historii pod otwartym formularzem
   renderLocalHistory(type, hiveNum);
 }
 
@@ -740,64 +737,27 @@ function renderGlobalTables() {
     </tr>`).join('');
 }
 
-// NOWA FUNKCJA - Buduje identyczne tabele jak globalne, ale tylko dla wybranego ula pod formularzem
 function renderLocalHistory(type, hiveNum) {
   const container = document.getElementById(`local-${type}-history`);
   if (!container) return;
-  
   let data = state[type + 's'].filter(d => String(d.hiveNum) === String(hiveNum) && d.syncStatus !== 'pending_delete').sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  if (data.length === 0) { container.innerHTML = "Brak wpisów..."; return; }
   
-  if (data.length === 0) { 
-    container.innerHTML = "<div style='padding:10px; color:#6b7280; font-style:italic;'>Brak wpisów dla tego ula.</div>"; 
-    return; 
-  }
-  
-  let tableHTML = `<div class="table-scroll-container"><table class="data-table" style="width:100%;"><thead><tr>`;
-  
-  if (type === 'inspection') {
-    tableHTML += `<th>Data</th><th>Rodzina</th><th>Matka</th><th>Czerw</th><th>Pokarm</th><th>Działania</th><th>Akcje</th></tr></thead><tbody>`;
-    tableHTML += data.map(r => `<tr>
-      <td>${fd(r.timestamp)} ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td>
-      <td>${r.rodzina || ''}</td><td>${r.matka || ''}</td><td>${r.ramkiCzerwiu || ''}</td>
-      <td>${r.pokarm || ''}</td><td>${r.dzialania || ''}</td>
-      <td>
-        <button onclick="editRecord('${r.id}', '${type}')" class="btn-small">✏️</button>
-        <button onclick="deleteRecord('${r.id}', '${type}')" class="btn-small" style="background:red; color:white;">🗑️</button>
-      </td></tr>`).join('');
-  } 
-  else if (type === 'feeding') {
-    tableHTML += `<th>Data</th><th>Cukier (kg)</th><th>Uwagi / Syrop</th><th>Akcje</th></tr></thead><tbody>`;
-    tableHTML += data.map(r => `<tr>
-      <td>${fd(r.timestamp)} ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td>
-      <td><b>${r.kgCukru || ''} kg</b></td><td>${r.uwagi || ''}</td>
-      <td>
-        <button onclick="editRecord('${r.id}', '${type}')" class="btn-small">✏️</button>
-        <button onclick="deleteRecord('${r.id}', '${type}')" class="btn-small" style="background:red; color:white;">🗑️</button>
-      </td></tr>`).join('');
-  } 
-  else if (type === 'treatment') {
-    tableHTML += `<th>Data</th><th>Preparat</th><th>Dawka / Uwagi</th><th>Akcje</th></tr></thead><tbody>`;
-    tableHTML += data.map(r => `<tr>
-      <td>${fd(r.timestamp)} ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td>
-      <td><b>${r.preparat || ''}</b></td><td>${r.uwagi || ''}</td>
-      <td>
-        <button onclick="editRecord('${r.id}', '${type}')" class="btn-small">✏️</button>
-        <button onclick="deleteRecord('${r.id}', '${type}')" class="btn-small" style="background:red; color:white;">🗑️</button>
-      </td></tr>`).join('');
-  } 
-  else if (type === 'izo') {
-    tableHTML += `<th>Data</th><th>Operacja (IZO)</th><th>Ramka</th><th>Kiedy Leczyć</th><th>Akcje</th></tr></thead><tbody>`;
-    tableHTML += data.map(r => `<tr>
-      <td>${fd(r.timestamp)} ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td>
-      <td><b>${r.izoType || ''}</b></td><td>${r.ramka || ''}</td><td style="color:#dc2626; font-weight:bold;">${r.kiedyLeczyc || ''}</td>
-      <td>
-        <button onclick="editRecord('${r.id}', '${type}')" class="btn-small">✏️</button>
-        <button onclick="deleteRecord('${r.id}', '${type}')" class="btn-small" style="background:red; color:white;">🗑️</button>
-      </td></tr>`).join('');
-  }
-  
-  tableHTML += `</tbody></table></div>`;
-  container.innerHTML = tableHTML;
+  container.innerHTML = data.map(r => {
+    let details = '';
+    if (type === 'inspection') details = `Czerw: ${r.ramkiCzerwiu}, Plan: ${r.przyszleDzialania}`;
+    if (type === 'feeding') details = `Syrop: ${r.kgCukru}kg, Uwagi: ${r.uwagi}`;
+    if (type === 'treatment') details = `Lek: ${r.preparat}, Uwagi: ${r.uwagi}`;
+    if (type === 'izo') details = `Operacja: ${r.izoType}, Ramka: ${r.ramka}<br><span style="color:#dc2626; font-weight:bold;">Kiedy leczyć: ${r.kiedyLeczyc || '-'}</span>`;
+
+    return `<div style="border-bottom: 1px solid #ccc; padding: 8px 0; display:flex; justify-content:space-between; align-items:center;">
+      <div style="flex:1;"><b>${fd(r.timestamp)} ${r.syncStatus === 'pending_save' ? '🟠' : ''}</b><br><small>${details}</small></div>
+      <div>
+         <button onclick="editRecord('${r.id}', '${type}')" class="btn-small">✏️</button>
+         <button onclick="deleteRecord('${r.id}', '${type}')" class="btn-small" style="background:red; color:white;">🗑️</button>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function renderTodos() {
