@@ -1,6 +1,6 @@
 // PASIEKA - SILNIK APLIKACJI Z DWUKIERUNKOWĄ SYNCHRONIZACJĄ (OFFLINE-FIRST)
 
-const DEFAULT_WEBHOOK = ''; 
+const DEFAULT_WEBHOOK = 'https://script.google.com/macros/s/AKfycbyg2cKHE0MWudDJfZJ2FdLn6Q1pWiQzo9ckPkyNdzcwjOKtsXwUTJv5_BARof9LyoBzfg/exec'; 
 let state = {
   inspections: [],
   feedings: [],
