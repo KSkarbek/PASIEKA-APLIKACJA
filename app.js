@@ -1,6 +1,7 @@
-// PASIEKA - SILNIK APLIKACJI (OFFLINE, SORTOWANIE EXCEL, HISTORIE LOKALNE, IZO)
+// PASIEKA - SILNIK APLIKACJI Z DWUKIERUNKOWĄ SYNCHRONIZACJĄ (OFFLINE-FIRST)
 
-const DEFAULT_WEBHOOK = ''; 
+const DEFAULT_WEBHOOK = 'https://script.google.com/macros/s/AKfycbzPnyxsCd1qtle4cQWaH7b4xVmm7fTic2Cd0A2N4hdMQxlKKDbICO51-rblndVwrFEvGQ/exec
+'; 
 let state = {
   inspections: [],
   feedings: [],
@@ -12,7 +13,7 @@ let state = {
 
 const TYPES = ['inspection', 'feeding', 'treatment', 'izo'];
 
-// Konfiguracja sortowania dla tabel w Historii (jak w Excelu)
+// Konfiguracja sortowania dla głównej Historii (Excel-style)
 let sortConfig = {
   inspections: { col: 'timestamp', dir: 'desc' },
   feedings: { col: 'timestamp', dir: 'desc' },
@@ -26,18 +27,22 @@ function getWebhookUrl() {
 }
 
 function isDateString(val) {
-  if (!val) return false;
+  if (val === null || val === undefined || val === '') return false;
   if (val instanceof Date) return true;
   const s = String(val).trim();
   if (/^\d{1,3}$/.test(s)) {
     const num = Number(s);
     if (num >= 1 && num <= 100) return false;
   }
-  return /\d{4}[-/.]\d{1,2}/.test(s) || /\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/.test(s) || s.includes('T') || s.includes('GMT');
+  if (/\d{4}[-/.]\d{1,2}/.test(s) || /\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/.test(s) || s.includes('T') || s.includes('GMT')) {
+    return true;
+  }
+  const d = new Date(s);
+  return !isNaN(d.getTime());
 }
 
 function isHiveNum(val) {
-  if (!val) return false;
+  if (val === null || val === undefined || val === '') return false;
   const s = String(val).trim();
   const n = parseInt(s);
   return !isNaN(n) && n >= 1 && n <= 100 && !s.includes('-') && !s.includes(':') && !s.includes('T') && !s.includes('GMT') && !s.includes('.');
@@ -71,11 +76,6 @@ function formatForDateInput(val) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function fd(d) {
-  if (!d) return '';
-  return new Date(d).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' });
-}
-
 function normalizeRecord(type, row) {
   if (!row || typeof row !== 'object') return null;
   let id = row.id ? String(row.id).trim() : '';
@@ -86,15 +86,11 @@ function normalizeRecord(type, row) {
   let hiveNum = null;
   let timestampStr = null;
 
-  if (isDateString(rawHive) && isHiveNum(rawTime)) {
-    hiveNum = parseInt(rawTime); timestampStr = rawHive;
-  } else if (isHiveNum(rawHive) && isDateString(rawTime)) {
-    hiveNum = parseInt(rawHive); timestampStr = rawTime;
-  } else if (isHiveNum(rawHive)) {
-    hiveNum = parseInt(rawHive); timestampStr = rawTime;
-  } else if (isHiveNum(rawTime)) {
-    hiveNum = parseInt(rawTime); timestampStr = rawHive;
-  } else {
+  if (isDateString(rawHive) && isHiveNum(rawTime)) { hiveNum = parseInt(rawTime); timestampStr = rawHive; } 
+  else if (isHiveNum(rawHive) && isDateString(rawTime)) { hiveNum = parseInt(rawHive); timestampStr = rawTime; } 
+  else if (isHiveNum(rawHive)) { hiveNum = parseInt(rawHive); timestampStr = rawTime; } 
+  else if (isHiveNum(rawTime)) { hiveNum = parseInt(rawTime); timestampStr = rawHive; } 
+  else {
     let matchH = String(rawHive).match(/^\d+$/);
     let matchT = String(rawTime).match(/^\d+$/);
     if (matchH && parseInt(matchH[0]) <= 100) { hiveNum = parseInt(matchH[0]); timestampStr = rawTime; } 
@@ -114,22 +110,15 @@ function normalizeRecord(type, row) {
   };
 
   if (type === 'inspection') {
-    normalized.rodzina = row.rodzina || '';
-    normalized.matka = row.matka || '';
-    normalized.jaja = row.jaja || '';
-    normalized.ramkiCzerwiu = row.ramkiCzerwiu || '0';
-    normalized.pokarm = row.pokarm || '';
-    normalized.polkorpus = row.polkorpus || '0';
-    normalized.dzialania = row.dzialania || '';
-    normalized.przyszleDzialania = row.przyszleDzialania || '';
+    normalized.rodzina = row.rodzina || ''; normalized.matka = row.matka || ''; normalized.jaja = row.jaja || '';
+    normalized.ramkiCzerwiu = row.ramkiCzerwiu || '0'; normalized.pokarm = row.pokarm || ''; normalized.polkorpus = row.polkorpus || '0';
+    normalized.dzialania = row.dzialania || ''; normalized.przyszleDzialania = row.przyszleDzialania || '';
   } else if (type === 'feeding') {
     let kg = row.kgCukru; let uw = row.uwagi;
     if (isNaN(parseFloat(kg)) && !isNaN(parseFloat(uw))) { kg = uw; uw = row.updatedAt || ''; }
-    normalized.kgCukru = String(kg || '0');
-    normalized.uwagi = String(uw || '');
+    normalized.kgCukru = String(kg || '0'); normalized.uwagi = String(uw || '');
   } else if (type === 'treatment') {
-    normalized.preparat = row.preparat || '';
-    normalized.uwagi = row.uwagi || '';
+    normalized.preparat = row.preparat || ''; normalized.uwagi = row.uwagi || '';
   } else if (type === 'izo') {
     let izoTypeVal = row.izoType || row.ramka || 'IZO-pocz';
     if (String(izoTypeVal).includes('Ul')) izoTypeVal = row.ramka || 'IZO-pocz';
@@ -227,7 +216,7 @@ window.saveQueen = function(hiveNum) {
   const input = document.getElementById('queen-input-' + hiveNum);
   if (input) {
     localStorage.setItem('queen_' + hiveNum, input.value);
-    showToast('💾 Zapisano dane matki dla ula ' + hiveNum, 'success');
+    showToast('💾 Zapisano matkę dla ula ' + hiveNum, 'success');
   }
 };
 
@@ -353,11 +342,9 @@ async function syncData(userTriggered = false) {
         for (let remoteItem of remoteList) {
           const localItem = localMap.get(remoteItem.id);
           if (!localItem || (localItem.syncStatus !== 'synced' && parseInt(remoteItem.updatedAt || '0') > parseInt(localItem.updatedAt || '0'))) {
-            remoteItem.syncStatus = 'synced';
-            await saveLocalRecord(t, remoteItem);
+            remoteItem.syncStatus = 'synced'; await saveLocalRecord(t, remoteItem);
           } else if (localItem && localItem.syncStatus === 'synced') {
-            remoteItem.syncStatus = 'synced';
-            await saveLocalRecord(t, remoteItem);
+            remoteItem.syncStatus = 'synced'; await saveLocalRecord(t, remoteItem);
           }
         }
       }
@@ -385,11 +372,12 @@ function initForms() {
       const isEdit = !!formEl.dataset.editId;
       const recordId = isEdit ? formEl.dataset.editId : 'rec_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
       const nowTime = Date.now().toString();
+      const hNum = document.getElementById(`select-${type === 'inspection' ? '' : type + '-'}hive`).value;
 
       let payload = {
         id: recordId,
         timestamp: document.getElementById(`input-${type === 'inspection' ? '' : type + '-'}date`).value,
-        hiveNum: document.getElementById(`select-${type === 'inspection' ? '' : type + '-'}hive`).value,
+        hiveNum: hNum,
         updatedAt: nowTime,
         syncStatus: 'pending_save'
       };
@@ -419,14 +407,23 @@ function initForms() {
 
       await saveLocalRecord(type, payload);
       await loadStateFromLocal();
-      
-      // Natychmiastowe odświeżenie dedykowanej historii na dole po zapisie
-      renderLocalHistory(type, payload.hiveNum);
+      renderLocalHistory(type, hNum);
       
       showToast(isEdit ? "Zaktualizowano wpis!" : "Zapisano wpis w pasiece!", "success");
       formEl.reset();
       delete formEl.dataset.editId;
       if (btn) btn.innerHTML = btn.innerHTML.replace('ZAKTUALIZUJ', 'ZAPISZ');
+      
+      // Auto-przeliczanie daty IZO po czyszczeniu formularza jeśli to był tab IZO
+      if(type === 'izo') {
+          const now = new Date();
+          now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+          const nowStr = now.toISOString().slice(0, 16);
+          document.getElementById('input-izo-date').value = nowStr;
+          updateIzoLeczenieDate(nowStr);
+          document.getElementById('select-izo-hive').value = hNum;
+      }
+      
       if (navigator.onLine) syncData(false);
     });
   });
@@ -442,7 +439,7 @@ async function deleteRecord(id, type) {
     item.updatedAt = Date.now().toString();
     await saveLocalRecord(type, item);
     await loadStateFromLocal();
-    renderLocalHistory(type, cNum); // Aktualizacja widoku lokalnego
+    renderLocalHistory(type, cNum); 
     showToast("Wpis oznaczony do usunięcia.", "warning");
     if (navigator.onLine) syncData(false);
   }
@@ -460,7 +457,10 @@ function editRecord(id, type) {
   const tzOffset = new Date().getTimezoneOffset() * 60000;
   const localISOTime = (new Date(new Date(record.timestamp) - tzOffset)).toISOString().slice(0, 16);
   const dateInput = document.getElementById(`input-${type === 'inspection' ? '' : type + '-'}date`);
-  if (dateInput) dateInput.value = localISOTime;
+  if (dateInput) {
+      dateInput.value = localISOTime;
+      if(type === 'izo') updateIzoLeczenieDate(localISOTime);
+  }
 
   if (type === 'inspection') {
     const m = document.querySelector(`input[name="matka"][value="${record.matka}"]`); if (m) m.checked = true;
@@ -512,15 +512,11 @@ function initTabs() {
   });
 }
 
-// Globalny SKOK z menu Ustawienia do Historii (Punkt 6)
 window.goToHistory = function(type) {
-  // Przejście na kartę Historia
-  const histTab = document.querySelector('[data-tab="tab-history"]');
+  const histTab = document.querySelector('[data-tab="tab-sheet"]');
   if(histTab) histTab.click();
-  // Zmiana podzakładki na właściwą kategorię
   const btn = document.getElementById(`btn-view-${type}`);
   if(btn) btn.click();
-  // Gładki skok wizualny w dół
   const wrapper = document.getElementById(`wrapper-${type}-table`);
   if(wrapper) wrapper.scrollIntoView({ behavior: 'smooth' });
 };
@@ -570,7 +566,7 @@ function updateHiveCards() {
             <span class="hive-last-rodzina">${last.rodzina || 'Rodzina OK'}</span>
           </div>
           <div class="hive-last-grid">
-            <div>👑 Matka status: <b>${last.matka || '-'}</b></div>
+            <div>👑 Matka: <b>${last.matka || '-'}</b></div>
             <div>🥚 Jaja: <b>${last.jaja || '-'}</b></div>
             <div>🪮 Czerw: <b>${last.ramkiCzerwiu || '0'} r.</b></div>
             <div>🍯 Pokarm: <b>${last.pokarm || '-'}</b></div>
@@ -600,7 +596,6 @@ function openForm(type, hiveNum) {
   const inputDate = document.getElementById(`input-${type === 'inspection' ? '' : type + '-'}date`);
   if (inputDate) inputDate.value = nowStr;
 
-  // Renderowanie powiązanej historii na bieżąco
   renderLocalHistory(type, hiveNum);
 
   if (type === 'izo') updateIzoLeczenieDate(nowStr);
@@ -611,7 +606,6 @@ function openForm(type, hiveNum) {
   if (btn) btn.innerHTML = btn.innerHTML.replace('ZAKTUALIZUJ', 'ZAPISZ');
 }
 
-// Prawidłowe wyliczenie daty (+24 dni) Punkt 4
 function updateIzoLeczenieDate(sourceDateStr) {
   if (!sourceDateStr) return;
   let d = new Date(sourceDateStr);
@@ -627,7 +621,11 @@ function updateIzoLeczenieDate(sourceDateStr) {
   }
 }
 
-// LOGIKA SORTOWANIA (Punkt 5)
+function fd(d) {
+  if (!d) return '';
+  return new Date(d).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' });
+}
+
 window.sortGlobal = function(type, col) {
   if (sortConfig[type].col === col) {
     sortConfig[type].dir = sortConfig[type].dir === 'asc' ? 'desc' : 'asc';
@@ -668,7 +666,6 @@ function renderGlobalTables() {
   const tbodyTreat = document.getElementById('treatments-tbody');
   const tbodyIzo = document.getElementById('izos-tbody');
   
-  // Wstawienie sortowalnych nagłówków do HTML
   const headInsp = document.getElementById('head-inspections');
   if(headInsp) headInsp.innerHTML = `
     <tr>
@@ -737,7 +734,7 @@ function renderGlobalTables() {
   if (tbodyTreat) tbodyTreat.innerHTML = activeTreat.map(r => `
     <tr>
       <td>${fd(r.timestamp)} ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td><td><b>${r.hiveNum}</b></td><td>${r.preparat || ''}</td><td>${r.uwagi || ''}</td>
-      <td><button onclick="editRecord('${r.id}', 'treatment')" class="btn-small">✏️</button> <button onclick="deleteRecord('${r.id}', 'treatment')" class="btn-small" style="background:red; color:white;">🗑️️</button></td>
+      <td><button onclick="editRecord('${r.id}', 'treatment')" class="btn-small">✏️</button> <button onclick="deleteRecord('${r.id}', 'treatment')" class="btn-small" style="background:red; color:white;">🗑</button></td>
     </tr>`).join('');
 
   if (tbodyIzo) tbodyIzo.innerHTML = activeIzo.map(r => `
@@ -748,7 +745,6 @@ function renderGlobalTables() {
     </tr>`).join('');
 }
 
-// Dedykowana historia otwieranego kafelka ula pod formularzem
 function renderLocalHistory(type, hiveNum) {
   const container = document.getElementById(`local-${type}-history`);
   if (!container) return;
@@ -760,36 +756,32 @@ function renderLocalHistory(type, hiveNum) {
     return; 
   }
   
-  let tableHTML = `<h3 style="margin: 15px 0 5px 0; font-size:1.1rem; color:#b45309;">Historia działań (Ul ${hiveNum})</h3>
+  let tableHTML = `<h3 style="margin: 5px 0 10px 0; font-size:1.1rem; color:#b45309;">Historia (Ul ${hiveNum})</h3>
     <div class="table-scroll-container"><table class="data-table" style="width:100%;"><thead><tr>`;
   
   if (type === 'inspection') {
-    tableHTML += `<th>Data</th><th>Rodzina/Matka</th><th>Czerw</th><th>Pokarm</th><th>Działania</th><th>Akcje</th></tr></thead><tbody>`;
+    tableHTML += `<th>Data</th><th>Czerw</th><th>Pokarm</th><th>Działania</th><th>Akcje</th></tr></thead><tbody>`;
     tableHTML += data.map(r => `<tr>
-      <td>${fd(r.timestamp)}</td>
-      <td>${r.rodzina || '-'}<br/>${r.matka || '-'}</td><td>${r.ramkiCzerwiu || ''}</td>
+      <td>${fd(r.timestamp)}</td><td>${r.ramkiCzerwiu || ''}</td>
       <td>${r.pokarm || ''}</td><td>${r.dzialania || ''}</td>
       <td><button onclick="editRecord('${r.id}', '${type}')" class="btn-small">✏️</button> <button onclick="deleteRecord('${r.id}', '${type}')" class="btn-small" style="background:red; color:white;">🗑️</button></td></tr>`).join('');
   } 
   else if (type === 'feeding') {
     tableHTML += `<th>Data</th><th>Cukier (kg)</th><th>Syrop/Uwagi</th><th>Akcje</th></tr></thead><tbody>`;
     tableHTML += data.map(r => `<tr>
-      <td>${fd(r.timestamp)}</td>
-      <td><b>${r.kgCukru || ''} kg</b></td><td>${r.uwagi || ''}</td>
+      <td>${fd(r.timestamp)}</td><td><b>${r.kgCukru || ''} kg</b></td><td>${r.uwagi || ''}</td>
       <td><button onclick="editRecord('${r.id}', '${type}')" class="btn-small">✏️</button> <button onclick="deleteRecord('${r.id}', '${type}')" class="btn-small" style="background:red; color:white;">🗑️</button></td></tr>`).join('');
   } 
   else if (type === 'treatment') {
     tableHTML += `<th>Data</th><th>Preparat</th><th>Dawka / Uwagi</th><th>Akcje</th></tr></thead><tbody>`;
     tableHTML += data.map(r => `<tr>
-      <td>${fd(r.timestamp)}</td>
-      <td><b>${r.preparat || ''}</b></td><td>${r.uwagi || ''}</td>
+      <td>${fd(r.timestamp)}</td><td><b>${r.preparat || ''}</b></td><td>${r.uwagi || ''}</td>
       <td><button onclick="editRecord('${r.id}', '${type}')" class="btn-small">✏️</button> <button onclick="deleteRecord('${r.id}', '${type}')" class="btn-small" style="background:red; color:white;">🗑️</button></td></tr>`).join('');
   } 
   else if (type === 'izo') {
     tableHTML += `<th>Data</th><th>Operacja (IZO)</th><th>Ramka</th><th>Kiedy Leczyć</th><th>Akcje</th></tr></thead><tbody>`;
     tableHTML += data.map(r => `<tr>
-      <td>${fd(r.timestamp)}</td>
-      <td><b>${r.izoType || ''}</b></td><td>${r.ramka || ''}</td><td style="color:#dc2626; font-weight:bold;">${r.kiedyLeczyc || ''}</td>
+      <td>${fd(r.timestamp)}</td><td><b>${r.izoType || ''}</b></td><td>${r.ramka || ''}</td><td style="color:#dc2626; font-weight:bold;">${r.kiedyLeczyc || ''}</td>
       <td><button onclick="editRecord('${r.id}', '${type}')" class="btn-small">✏️</button> <button onclick="deleteRecord('${r.id}', '${type}')" class="btn-small" style="background:red; color:white;">🗑️</button></td></tr>`).join('');
   }
   
