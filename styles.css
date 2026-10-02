@@ -1069,5 +1069,13 @@ body.dark-mode .app-header h1 {
   margin-top: 4px;
   font-size: 0.78rem;
 }
-
+/* Stylowanie nagłówków z sortowaniem */
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.2s ease;
+}
+th.sortable:hover {
+  background-color: #d1d5db; /* Podświetlenie przy najechaniu */
+}
 
