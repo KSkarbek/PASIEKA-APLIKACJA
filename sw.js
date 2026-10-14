@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pasieka-v3-sync';
+const CACHE_NAME = 'pasieka-v5-sync';
 const ASSETS = [
   './',
   './index.html',
@@ -33,16 +33,14 @@ self.addEventListener('fetch', (e) => {
     return;
   }
   e.respondWith(
-    caches.match(e.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        fetch(e.request).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            caches.open(CACHE_NAME).then((cache) => cache.put(e.request, networkResponse));
-          }
-        }).catch(() => {/* Ignoruj błędy w tle */});
-        return cachedResponse;
-      }
-      return fetch(e.request);
-    })
+    fetch(e.request)
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const respClone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(e.request, respClone));
+        }
+        return networkResponse;
+      })
+      .catch(() => caches.match(e.request))
   );
 });
