@@ -36,7 +36,7 @@
     <button class="tab-btn active" data-tab="tab-dom">🏡 DOM (1-6)</button>
     <button class="tab-btn" data-tab="tab-zbior">🌾 ZBIÓR (7-12)</button>
     <button class="tab-btn" data-tab="tab-las">🌲 LAS (13-18)</button>
-    <button class="tab-btn" data-tab="tab-todo" style="background:#059669; color:#fff; font-weight:bold;">📋 ZROBIĆ</button>
+    <button class="tab-btn" data-tab="tab-todo" style="background:#059669; color:#fff;">📋 ZROBIĆ</button>
     <button class="tab-btn" data-tab="tab-sheet">📊 Arkusz / Ustawienia</button>
   </nav>
 
@@ -55,16 +55,12 @@
     <div id="hives-grid-las" class="hives-grid hives-grid-las"></div>
   </section>
   
-  <!-- ZAKŁADKA ZROBIĆ -->
   <section id="tab-todo" class="tab-content">
     <div class="card">
       <div class="card-header" style="background: #d1fae5; color: #065f46;">
         <h2>📋 Planowane Zadania do Zrobienia</h2>
       </div>
-      <p style="padding: 10px 14px 0; color: #4b5563; font-size: 0.9rem; margin: 0;">
-        Kliknij kwadracik, aby oznaczyć zadanie jako wykonane <b>[X]</b>. Niewykonane zadania są zawsze na górze.
-      </p>
-      <ul id="todo-list" style="list-style: none; padding: 12px; margin: 0;"></ul>
+      <ul id="todo-list" style="list-style: none; padding: 10px; margin: 0;"></ul>
     </div>
   </section>
 
@@ -73,18 +69,18 @@
     <div class="card form-card">
       <div class="card-header">
         <h2 id="form-hive-title">Przegląd Ula</h2>
-        <button type="button" class="btn-small" onclick="goBackToHives()">← Powrót</button>
+        <button type="button" class="btn-small" onclick="document.querySelector('[data-tab=\'tab-dom\']').click()">← Powrót</button>
       </div>
 
       <form id="inspection-form">
-        <div class="form-row flex-row align-center">
+        <div class="form-row flex-row">
           <div class="form-group flex-1">
             <label for="select-hive">Wybierz Ul:</label>
             <select id="select-hive" class="input-control select-lg" required></select>
           </div>
-          <div class="form-group date-compact-group">
+          <div class="form-group" style="max-width: 220px;">
             <label for="input-date">Data i Godzina:</label>
-            <input type="datetime-local" id="input-date" class="input-control compact-date-input" required>
+            <input type="datetime-local" id="input-date" class="input-control" required>
           </div>
         </div>
 
@@ -145,12 +141,12 @@
         </div>
 
         <div class="form-group margin-top-md">
-          <label for="input-przyszle-dzialania">Przyszłe Działania / Plan (Trafia do ZROBIĆ):</label>
-          <textarea id="input-przyszle-dzialania" class="input-control" rows="2" placeholder="np. Podać syrop za 3 dni"></textarea>
+          <label for="input-przyszle-dzialania">Przyszłe Działania / Plan:</label>
+          <textarea id="input-przyszle-dzialania" class="input-control" rows="2" placeholder="np. Skontrolować za 7 dni"></textarea>
         </div>
 
         <div class="form-actions margin-top-lg">
-          <button type="submit" id="btn-submit-inspection" class="btn-save-huge">
+          <button type="submit" id="btn-submit-inspection" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: 3px solid #047857; font-size: 1.6rem; font-weight: 800; padding: 22px; width: 100%; border-radius: 12px; box-shadow: 0 8px 15px rgba(0,0,0,0.2); text-transform: uppercase;">
             💾 ZAPISZ PRZEGLĄD
           </button>
         </div>
@@ -158,8 +154,8 @@
     </div>
     
     <div class="card margin-top-md">
-      <div class="card-header" style="background: #f3f4f6;"><h3>📋 Historia przeglądów tego ula</h3></div>
-      <div id="local-inspection-history" style="padding: 8px;"></div>
+      <div class="card-header"><h3>📋 Ostatnie przeglądy tego ula</h3></div>
+      <div id="local-inspection-history" style="padding: 8px;">Brak wpisów...</div>
     </div>
   </section>
 
@@ -168,17 +164,17 @@
     <div class="card form-card">
       <div class="card-header" style="background: #fde68a; color: #92400e;">
         <h2 id="form-feeding-title">🍯 Karmienie</h2>
-        <button type="button" class="btn-small" onclick="goBackToHives()">← Powrót</button>
+        <button type="button" class="btn-small" onclick="document.querySelector('[data-tab=\'tab-dom\']').click()">← Powrót</button>
       </div>
       <form id="feeding-form">
-        <div class="form-row flex-row align-center">
+        <div class="form-row flex-row">
           <div class="form-group flex-1">
             <label for="select-feeding-hive">Wybierz Ul:</label>
             <select id="select-feeding-hive" class="input-control select-lg" required></select>
           </div>
-          <div class="form-group date-compact-group">
+          <div class="form-group" style="max-width: 220px;">
             <label for="input-feeding-date">Data i Godzina:</label>
-            <input type="datetime-local" id="input-feeding-date" class="input-control compact-date-input" required>
+            <input type="datetime-local" id="input-feeding-date" class="input-control" required>
           </div>
         </div>
         <div class="form-group margin-top-md">
@@ -194,10 +190,9 @@
         </div>
       </form>
     </div>
-
     <div class="card margin-top-md">
       <div class="card-header" style="background: #fef3c7; color: #92400e;"><h3>🍯 Historia karmienia tego ula</h3></div>
-      <div id="local-feeding-history" style="padding: 8px;"></div>
+      <div id="local-feeding-history" style="padding: 8px;">Brak wpisów...</div>
     </div>
   </section>
 
@@ -206,22 +201,22 @@
     <div class="card form-card">
       <div class="card-header" style="background: #fca5a5; color: #991b1b;">
         <h2 id="form-treatment-title">💉 Leczenie</h2>
-        <button type="button" class="btn-small" onclick="goBackToHives()">← Powrót</button>
+        <button type="button" class="btn-small" onclick="document.querySelector('[data-tab=\'tab-dom\']').click()">← Powrót</button>
       </div>
       <form id="treatment-form">
-        <div class="form-row flex-row align-center">
+        <div class="form-row flex-row">
           <div class="form-group flex-1">
             <label for="select-treatment-hive">Wybierz Ul:</label>
             <select id="select-treatment-hive" class="input-control select-lg" required></select>
           </div>
-          <div class="form-group date-compact-group">
+          <div class="form-group" style="max-width: 220px;">
             <label for="input-treatment-date">Data i Godzina:</label>
-            <input type="datetime-local" id="input-treatment-date" class="input-control compact-date-input" required>
+            <input type="datetime-local" id="input-treatment-date" class="input-control" required>
           </div>
         </div>
         <div class="form-group margin-top-md">
           <label for="input-treatment-preparat" class="group-label">Preparat / Metoda:</label>
-          <input type="text" id="input-treatment-preparat" class="input-control" required placeholder="np. Kwas szczawiowy, Apiwarol">
+          <input type="text" id="input-treatment-preparat" class="input-control" required>
         </div>
         <div class="form-group margin-top-md">
           <label for="input-treatment-notes" class="group-label">Dawka / Uwagi:</label>
@@ -232,10 +227,9 @@
         </div>
       </form>
     </div>
-
     <div class="card margin-top-md">
       <div class="card-header" style="background: #fee2e2; color: #991b1b;"><h3>💉 Historia leczenia tego ula</h3></div>
-      <div id="local-treatment-history" style="padding: 8px;"></div>
+      <div id="local-treatment-history" style="padding: 8px;">Brak wpisów...</div>
     </div>
   </section>
 
@@ -244,17 +238,17 @@
     <div class="card form-card">
       <div class="card-header" style="background: #c7d2fe; color: #3730a3;">
         <h2 id="form-izo-title">🗃️ Izolator</h2>
-        <button type="button" class="btn-small" onclick="goBackToHives()">← Powrót</button>
+        <button type="button" class="btn-small" onclick="document.querySelector('[data-tab=\'tab-dom\']').click()">← Powrót</button>
       </div>
       <form id="izo-form">
-        <div class="form-row flex-row align-center">
+        <div class="form-row flex-row">
           <div class="form-group flex-1">
             <label for="select-izo-hive">Wybierz Ul:</label>
             <select id="select-izo-hive" class="input-control select-lg" required></select>
           </div>
-          <div class="form-group date-compact-group">
+          <div class="form-group" style="max-width: 220px;">
             <label for="input-izo-date">Data i Godzina:</label>
-            <input type="datetime-local" id="input-izo-date" class="input-control compact-date-input" required>
+            <input type="datetime-local" id="input-izo-date" class="input-control" required>
           </div>
         </div>
         <div class="form-group margin-top-md">
@@ -279,10 +273,9 @@
         </div>
       </form>
     </div>
-
     <div class="card margin-top-md">
       <div class="card-header" style="background: #e0e7ff; color: #3730a3;"><h3>🗃️ Historia IZO tego ula</h3></div>
-      <div id="local-izo-history" style="padding: 8px;"></div>
+      <div id="local-izo-history" style="padding: 8px;">Brak wpisów...</div>
     </div>
   </section>
 
@@ -296,29 +289,23 @@
         </div>
       </div>
 
-      <!-- SKRÓTY DO TABEL -->
-      <div class="settings-section margin-top-md">
-        <h3 style="color: #4b5563; margin-bottom: 10px;">Skok do wybranej Historii 🗂️</h3>
-        <div style="display:flex; gap:10px; flex-wrap:wrap;">
-          <button type="button" onclick="goToHistory('inspections')" class="btn-small" style="flex:1; padding:12px; font-size:1rem; font-weight:bold; background:#e5e7eb; color:#374151;">📋 Przeglądy</button>
-          <button type="button" onclick="goToHistory('feedings')" class="btn-small" style="flex:1; padding:12px; font-size:1rem; font-weight:bold; background:#fde68a; color:#92400e;">🍯 Karmienie</button>
-          <button type="button" onclick="goToHistory('treatments')" class="btn-small" style="flex:1; padding:12px; font-size:1rem; font-weight:bold; background:#fca5a5; color:#991b1b;">💉 Leczenie</button>
-          <button type="button" onclick="goToHistory('izos')" class="btn-small" style="flex:1; padding:12px; font-size:1rem; font-weight:bold; background:#c7d2fe; color:#3730a3;">🗃️ IZO</button>
-        </div>
-      </div>
-
-      <details class="webhook-details margin-top-md">
+      <details class="webhook-details margin-top-sm">
         <summary class="webhook-summary">⚙️ Ustawienia Połączenia Google Sheets (Webhook URL)</summary>
         <div class="webhook-content">
           <div style="display:flex; gap:8px; margin-top:8px;">
             <input type="text" id="input-webhook-url" class="input-control" placeholder="Wklej link z Google Apps Script (https://script.google.com/.../exec)">
-            <button type="button" id="btn-save-webhook" class="btn-small" style="background:#d97706; color:white; border:none; padding:8px 16px; font-weight:bold;">Zapisz</button>
+            <button id="btn-save-webhook" class="btn-small" style="background:#d97706; color:white; border:none; padding:8px 16px; font-weight:bold;">Zapisz</button>
           </div>
           <small style="color:#78350f; margin-top:4px; display:block;">Adres wdrożonego skryptu Webhook z Google Sheets. Pozwala synchronizować dane dwukierunkowo.</small>
         </div>
       </details>
 
-      <p style="margin-top:14px; color:#6b7280; font-size:0.88rem;">💡 <b>Wskazówka:</b> Kliknij dowolny nagłówek kolumny w tabeli poniżej (np. <i>Ul, Data, Matka, Pokarm</i>), aby posortować wiersze jak w Excelu.</p>
+      <div class="tab-toggle-bar margin-top-md" style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button type="button" onclick="goToHistory('inspections')" id="btn-view-inspections" class="btn-tab-toggle active">📋 Przeglądy</button>
+        <button type="button" onclick="goToHistory('feedings')" id="btn-view-feedings" class="btn-tab-toggle">🍯 Karmienie</button>
+        <button type="button" onclick="goToHistory('treatments')" id="btn-view-treatments" class="btn-tab-toggle">💉 Leczenie</button>
+        <button type="button" onclick="goToHistory('izos')" id="btn-view-izos" class="btn-tab-toggle">🗃️ IZO</button>
+      </div>
 
       <!-- DZIAŁ PRZEGLĄDY -->
       <div id="wrapper-inspections-table" class="table-wrapper margin-top-md">
