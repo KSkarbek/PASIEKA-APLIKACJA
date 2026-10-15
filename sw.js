@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pasieka-v40-sync';
+const CACHE_NAME = 'pasieka-v6-sync';
 const ASSETS = [
   './',
   './index.html',
@@ -9,10 +9,10 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (e) => {
+  self.skipWaiting();
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
   );
-  self.skipWaiting();
 });
 
 self.addEventListener('activate', (e) => {
@@ -28,21 +28,20 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
+// Strategia Network-First (jak we wczorajszej wersji v5) - zawsze pobiera świeży kod jeśli jest internet
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET' || e.request.url.includes('script.google.com')) {
     return;
   }
   e.respondWith(
-    caches.match(e.request).then((cachedResponse) => {
-      const fetchPromise = fetch(e.request).then((networkResponse) => {
+    fetch(e.request)
+      .then((networkResponse) => {
         if (networkResponse && networkResponse.status === 200) {
-          const clone = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
+          const respClone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(e.request, respClone));
         }
         return networkResponse;
-      }).catch(() => cachedResponse);
-
-      return cachedResponse || fetchPromise;
-    })
+      })
+      .catch(() => caches.match(e.request))
   );
 });
