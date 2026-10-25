@@ -1,6 +1,8 @@
-// PASIEKA - SILNIK APLIKACJI Z DWUKIERUNKOWĄ SYNCHRONIZACJĄ I NOTATKAMI ZROBIĆ (ODPORNY NA TARCZE BRAVE)
+// PASIEKA - SILNIK APLIKACJI Z PEŁNĄ SYNCHRONIZACJĄ NAZW MATEK I ZADAŃ ZROBIĆ (BRAVE WINDOWS + ANDROID)
 
+// 👇 WKLEJ TUTAJ SWÓJ LINK WEBHOOKA MIĘDZY APOSTROFY, ABY BYŁ ZAPISANY NA STAŁE W KODZIE:
 const DEFAULT_WEBHOOK = 'https://script.google.com/macros/s/AKfycbzPnyxsCd1qtle4cQWaH7b4xVmm7fTic2Cd0A2N4hdMQxlKKDbICO51-rblndVwrFEvGQ/exec'; 
+
 let lastActiveHiveTab = 'tab-dom';
 
 let state = {
@@ -12,7 +14,6 @@ let state = {
   isSyncing: false
 };
 
-// Stan sortowania tabel (jak w Excelu)
 let sortConfig = {
   inspections: { key: 'timestamp', dir: 'desc' },
   feedings: { key: 'timestamp', dir: 'desc' },
@@ -37,17 +38,38 @@ function getCurrentLocalISO() {
   return now.toISOString().slice(0, 16);
 }
 
+// ROZPOZNAWANIE SPECJALNYCH REKORDÓW SYNCHRONIZOWANYCH W TABELI INSPECTIONS
 function isStandaloneNote(rec) {
-  return rec && String(rec.rodzina) === 'NOTATKA_ZROBIC';
+  return rec && (String(rec.rodzina) === 'NOTATKA_ZROBIC' || String(rec.id).startsWith('todo_'));
 }
 
-function getTodoTargetLabel(hiveNum) {
-  const num = String(hiveNum);
-  if (num === '99') return '🐝 Ogólna (Cała Pasieka)';
-  if (num === '91') return '🏡 Pasieka DOM';
-  if (num === '92') return '🌾 Pasieka ZBIÓR';
-  if (num === '93') return '🌲 Pasieka LAS';
-  return `Ul ${num}`;
+function isQueenRecord(rec) {
+  return rec && (String(rec.rodzina) === 'OPIS_MATKI' || String(rec.id).startsWith('queen_hive_'));
+}
+
+function isSystemInspectionRecord(rec) {
+  return isStandaloneNote(rec) || isQueenRecord(rec);
+}
+
+function getTodoTargetLabel(rec) {
+  if (!rec) return 'Ul 1';
+  const scope = String(rec.matka || '').trim();
+  if (scope === 'CAŁA PASIEKA' || String(rec.hiveNum) === '99') return '🐝 Ogólna (Cała Pasieka)';
+  if (scope === 'PASIEKA DOM' || String(rec.hiveNum) === '91') return '🏡 Pasieka DOM (1-6)';
+  if (scope === 'PASIEKA ZBIÓR' || String(rec.hiveNum) === '92') return '🌾 Pasieka ZBIÓR (7-12)';
+  if (scope === 'PASIEKA LAS' || String(rec.hiveNum) === '93') return '🌲 Pasieka LAS (13-18)';
+  return `Ul ${rec.hiveNum}`;
+}
+
+function getTodoSelectValueFromRecord(rec) {
+  if (!rec) return 'CAŁA PASIEKA';
+  const scope = String(rec.matka || '').trim();
+  if (['CAŁA PASIEKA', 'PASIEKA DOM', 'PASIEKA ZBIÓR', 'PASIEKA LAS'].includes(scope)) return scope;
+  if (String(rec.hiveNum) === '99') return 'CAŁA PASIEKA';
+  if (String(rec.hiveNum) === '91') return 'PASIEKA DOM';
+  if (String(rec.hiveNum) === '92') return 'PASIEKA ZBIÓR';
+  if (String(rec.hiveNum) === '93') return 'PASIEKA LAS';
+  return String(rec.hiveNum || '1');
 }
 
 function cleanTodoText(str) {
@@ -142,7 +164,17 @@ function normalizeRecord(type, row) {
     }
   }
 
-  if (!hiveNum || isNaN(hiveNum) || hiveNum < 1 || hiveNum > 100) return null;
+  // Fallback dla rekordów specjalnych (notatki ZROBIĆ i opisy matek), gdyby arkusz przekształcił numer ula
+  if (!hiveNum || isNaN(hiveNum) || hiveNum < 1 || hiveNum > 100) {
+    if (id.startsWith('queen_hive_')) {
+      hiveNum = parseInt(id.replace('queen_hive_', '')) || 1;
+    } else if (id.startsWith('todo_') || String(row.rodzina) === 'NOTATKA_ZROBIC') {
+      hiveNum = 1;
+    } else {
+      return null;
+    }
+  }
+
   let d = new Date(timestampStr);
   let finalTimestamp = (!isNaN(d.getTime())) ? d.toISOString() : new Date().toISOString();
 
@@ -189,7 +221,7 @@ function normalizeRecord(type, row) {
   return normalized;
 }
 
-// BAZA DANYCH Z BEZPIECZNIKIEM CZASOWYM DLA BRAVE
+// BAZA DANYCH Z BEZPIECZNIKIEM CZASOWYM DLA BRAVE + SYNCHRONIZACJA Z LOCALSTORAGE
 const DB_NAME = 'PasiekaDB';
 const DB_VERSION = 1;
 let db = null;
@@ -203,7 +235,6 @@ function initDB() {
         resolve(val);
       }
     };
-    // Jeśli Brave zawiesi IndexedDB, po 1.2 sekundy przechodzimy na LocalStorage
     setTimeout(() => finish(null), 1200);
 
     try {
@@ -225,14 +256,15 @@ function initDB() {
         });
       };
     } catch (err) {
-      console.warn("IndexedDB zablokowane przez przeglądarkę, używam LocalStorage:", err);
       finish(null);
     }
   });
 }
 
+// Łączenie danych z IndexedDB oraz LocalStorage, aby nigdy nic nie zginęło przy restarcie Brave
 async function getLocalRecords(type) {
   const storeName = type + 's';
+  const lsItems = getFallbackLocalStorage(storeName);
   if (db) {
     return new Promise((resolve) => {
       try {
@@ -240,15 +272,26 @@ async function getLocalRecords(type) {
         const store = tx.objectStore(storeName);
         const req = store.getAll();
         req.onsuccess = () => {
-          const res = req.result || [];
-          saveFallbackLocalStorageAll(storeName, res);
-          resolve(res);
+          const dbItems = req.result || [];
+          const mergedMap = new Map();
+          lsItems.forEach(item => { if (item && item.id) mergedMap.set(item.id, item); });
+          dbItems.forEach(item => {
+            if (item && item.id) {
+              const existing = mergedMap.get(item.id);
+              if (!existing || parseInt(item.updatedAt || '0') >= parseInt(existing.updatedAt || '0')) {
+                mergedMap.set(item.id, item);
+              }
+            }
+          });
+          const mergedList = Array.from(mergedMap.values());
+          saveFallbackLocalStorageAll(storeName, mergedList);
+          resolve(mergedList);
         };
-        req.onerror = () => resolve(getFallbackLocalStorage(storeName));
-      } catch (e) { resolve(getFallbackLocalStorage(storeName)); }
+        req.onerror = () => resolve(lsItems);
+      } catch (e) { resolve(lsItems); }
     });
   }
-  return getFallbackLocalStorage(storeName);
+  return lsItems;
 }
 
 async function saveLocalRecord(type, record) {
@@ -308,14 +351,20 @@ function deleteFallbackLocalStorage(storeName, id) {
   return true;
 }
 
-// INICJALIZACJA APLIKACJI - NAJPIERW KAFELKI I INTERFEJS, POTEM BAZA
+// INICJALIZACJA APLIKACJI
 document.addEventListener('DOMContentLoaded', async () => {
-  // 1. Natychmiast rysujemy kafelki uli, formularz ZROBIĆ i zakładki
   initTabs();
   initHives();
   initForms();
   initTodoForm();
   initNetworkListeners();
+
+  // Ochrona przed zamknięciem karty w trakcie wysyłania do Google Sheets
+  window.addEventListener('beforeunload', (e) => {
+    if (state.isSyncing || state.syncPendingCount > 0) {
+      syncData(false);
+    }
+  });
 
   const syncBtn = document.getElementById('btn-sync-now');
   if (syncBtn) syncBtn.addEventListener('click', () => syncData(true));
@@ -328,7 +377,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const urlInput = document.getElementById('input-webhook-url');
       if (urlInput && urlInput.value) {
         try { localStorage.setItem('gsheet_webhook', urlInput.value.trim()); } catch (e) {}
-        showToast("Zapisano nowy adres Webhooka!", "success");
+        showToast("Zapisano adres Webhooka! Synchronizuję...", "success");
         syncData(true);
       }
     });
@@ -343,11 +392,43 @@ document.addEventListener('DOMContentLoaded', async () => {
     izoDateInput.addEventListener('input', (e) => updateIzoLeczenieDate(e.target.value));
   }
 
-  // 2. Dopiero teraz inicjujemy bazę i ładujemy zapisane dane
   await initDB();
   await loadStateFromLocal();
+  await migrateLocalQueensToSyncRecords();
   syncData(false);
 });
+
+// Automatyczna migracja dawnych opisów matek z localStorage do synchronizowanych rekordów
+async function migrateLocalQueensToSyncRecords() {
+  let migrated = false;
+  for (let i = 1; i <= 18; i++) {
+    let localNote = '';
+    try { localNote = (localStorage.getItem(`pasieka_queen_${i}`) || '').trim(); } catch (e) {}
+    const existingRec = state.inspections.find(r => r.id === `queen_hive_${i}` && r.syncStatus !== 'pending_delete');
+    if (localNote && !existingRec) {
+      const payload = {
+        id: `queen_hive_${i}`,
+        timestamp: new Date().toISOString(),
+        hiveNum: String(i),
+        rodzina: 'OPIS_MATKI',
+        matka: 'TAK',
+        jaja: 'TAK',
+        ramkiCzerwiu: '0',
+        pokarm: 'OK',
+        polkorpus: '0',
+        dzialania: localNote,
+        przyszleDzialania: '',
+        updatedAt: Date.now().toString(),
+        syncStatus: 'pending_save'
+      };
+      await saveLocalRecord('inspection', payload);
+      migrated = true;
+    }
+  }
+  if (migrated) {
+    await loadStateFromLocal();
+  }
+}
 
 async function loadStateFromLocal() {
   for (let t of TYPES) {
@@ -383,6 +464,12 @@ function initNetworkListeners() {
 function updateSyncUI() {
   const badge = document.getElementById('sync-status-badge');
   if (!badge) return;
+  const webhookUrl = getWebhookUrl();
+  if (!webhookUrl) {
+    badge.className = 'sync-badge offline';
+    badge.innerHTML = '⚠️ Brak Webhooka (Wklej w Ustawieniach)';
+    return;
+  }
   if (state.isSyncing) {
     badge.className = 'sync-badge syncing';
     badge.innerHTML = '🔄 Synchronizacja...';
@@ -402,11 +489,16 @@ async function syncData(userTriggered = false) {
   if (state.isSyncing) return;
   const webhookUrl = getWebhookUrl();
   if (!webhookUrl) {
-    if (userTriggered) showToast("Wklej najpierw link Webhooka w zakładce Arkusz / Ustawienia!", "warning");
+    updateSyncUI();
+    if (userTriggered) {
+      showToast("Brak linku Webhooka! Wklej go w zakładce 📊 Arkusz / Ustawienia!", "error");
+      const sheetBtn = document.querySelector('.tab-btn[data-tab="tab-sheet"]');
+      if (sheetBtn) sheetBtn.click();
+    }
     return;
   }
   if (!navigator.onLine) {
-    if (userTriggered) showToast("Brak internetu. Dane są bezpieczne na urządzeniu.", "warning");
+    if (userTriggered) showToast("Brak internetu. Dane czekają w pamięci urządzenia.", "warning");
     return;
   }
   state.isSyncing = true;
@@ -485,9 +577,11 @@ async function syncData(userTriggered = false) {
         const storeName = t + 's';
         const rawRemoteList = Array.isArray(res[storeName]) ? res[storeName] : (Array.isArray(res[t]) ? res[t] : []);
         const remoteList = rawRemoteList.map(r => normalizeRecord(t, r)).filter(r => r !== null);
+        const remoteIds = new Set(remoteList.map(r => r.id));
         const localList = state[storeName] || [];
         const localMap = new Map(localList.map(item => [item.id, item]));
 
+        // 1. Zapisz/zaktualizuj rekordy pobrane z Arkusza Google
         for (let remoteItem of remoteList) {
           const localItem = localMap.get(remoteItem.id);
           if (!localItem) {
@@ -507,6 +601,13 @@ async function syncData(userTriggered = false) {
             }
           }
         }
+
+        // 2. Jeśli rekord był wcześniej zsynchronizowany, a został usunięty na drugim urządzeniu, usuń go również tutaj
+        for (let localItem of localList) {
+          if (localItem.syncStatus === 'synced' && !remoteIds.has(localItem.id)) {
+            await deleteLocalRecordPermanent(t, localItem.id);
+          }
+        }
       }
       await loadStateFromLocal();
       if (userTriggered) showToast("Synchronizacja ukończona pomyślnie! 🐝", "success");
@@ -521,7 +622,7 @@ async function syncData(userTriggered = false) {
   }
 }
 
-// OBSŁUGA NIEZALEŻNEGO FORMULARZA W ZAKŁADCE ZROBIĆ
+// OBSŁUGA NIEZALEŻNEGO FORMULARZA W ZAKŁADCE ZROBIĆ (100% KOMPATYBILNY Z ARKUSZEM GOOGLE)
 function initTodoForm() {
   const form = document.getElementById('todo-form');
   const dateInput = document.getElementById('input-todo-date');
@@ -538,7 +639,7 @@ function initTodoForm() {
 
     const isEdit = !!form.dataset.editId;
     const recordId = isEdit ? form.dataset.editId : 'todo_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
-    const targetHive = document.getElementById('select-todo-target')?.value || '99';
+    const targetVal = document.getElementById('select-todo-target')?.value || 'CAŁA PASIEKA';
     const dateVal = document.getElementById('input-todo-date')?.value || getCurrentLocalISO();
     const textVal = cleanTodoText(document.getElementById('input-todo-text')?.value || '');
 
@@ -547,26 +648,39 @@ function initTodoForm() {
       return;
     }
 
-    // Zachowaj status [X] podczas edycji, jeśli zadanie było już odhaczone
     let existingDone = false;
     if (isEdit) {
       const existingRec = state.inspections.find(r => r.id === recordId);
       if (existingRec && isTodoDone(existingRec)) existingDone = true;
     }
 
+    // Zawsze wysyłamy bezpieczny numer ula 1-18 dla Google Sheets, a zakres grup zapisujemy w kolumnie matka
+    let safeHiveNum = '1';
+    let scopeLabel = targetVal;
+    if (/^\d+$/.test(targetVal)) {
+      safeHiveNum = targetVal;
+      scopeLabel = `UL ${targetVal}`;
+    } else if (targetVal === 'PASIEKA DOM') {
+      safeHiveNum = '1';
+    } else if (targetVal === 'PASIEKA ZBIÓR') {
+      safeHiveNum = '7';
+    } else if (targetVal === 'PASIEKA LAS') {
+      safeHiveNum = '13';
+    }
+
     const finalText = existingDone ? `[X] ${textVal}` : textVal;
 
     const payload = {
       id: recordId,
-      timestamp: dateVal,
-      hiveNum: String(targetHive),
+      timestamp: new Date(dateVal).toISOString(),
+      hiveNum: String(safeHiveNum),
       rodzina: 'NOTATKA_ZROBIC',
-      matka: '-',
+      matka: scopeLabel,
       jaja: '-',
       ramkiCzerwiu: '0',
       pokarm: '-',
       polkorpus: '0',
-      dzialania: existingDone ? 'WYKONANE' : '',
+      dzialania: existingDone ? 'WYKONANE' : 'DO ZROBIENIA',
       przyszleDzialania: finalText,
       updatedAt: Date.now().toString(),
       syncStatus: 'pending_save'
@@ -575,7 +689,7 @@ function initTodoForm() {
     await saveLocalRecord('inspection', payload);
     await loadStateFromLocal();
     resetTodoForm();
-    showToast(isEdit ? "Zaktualizowano notatkę!" : "Dodano nową notatkę do ZROBIĆ!", "success");
+    showToast(isEdit ? "Zaktualizowano notatkę! Wysyłam do arkusza..." : "Zapisano notatkę w ZROBIĆ! Wysyłam do arkusza...", "success");
 
     if (navigator.onLine) syncData(false);
   });
@@ -583,9 +697,7 @@ function initTodoForm() {
 
 function resetTodoForm() {
   const form = document.getElementById('todo-form');
-  if (form) {
-    delete form.dataset.editId;
-  }
+  if (form) delete form.dataset.editId;
   const title = document.getElementById('todo-form-title');
   if (title) title.innerText = '➕ Dodaj Notatkę / Zadanie do Zrobienia';
   const btn = document.getElementById('btn-submit-todo');
@@ -595,7 +707,7 @@ function resetTodoForm() {
   const textInput = document.getElementById('input-todo-text');
   if (textInput) textInput.value = '';
   const targetSelect = document.getElementById('select-todo-target');
-  if (targetSelect) targetSelect.value = '99';
+  if (targetSelect) targetSelect.value = 'CAŁA PASIEKA';
   const dateInput = document.getElementById('input-todo-date');
   if (dateInput) dateInput.value = getCurrentLocalISO();
 }
@@ -604,7 +716,6 @@ function editStandaloneTodo(id) {
   const rec = state.inspections.find(r => r.id === id);
   if (!rec) return;
 
-  // Upewnij się, że jesteśmy w zakładce ZROBIĆ
   const todoTabBtn = document.querySelector('.tab-btn[data-tab="tab-todo"]');
   if (todoTabBtn && !todoTabBtn.classList.contains('active')) {
     todoTabBtn.click();
@@ -623,7 +734,7 @@ function editStandaloneTodo(id) {
   if (cancelBtn) cancelBtn.classList.remove('hidden');
 
   const targetSelect = document.getElementById('select-todo-target');
-  if (targetSelect) targetSelect.value = String(rec.hiveNum || '99');
+  if (targetSelect) targetSelect.value = getTodoSelectValueFromRecord(rec);
 
   const tzOffset = new Date().getTimezoneOffset() * 60000;
   let parsedDate = new Date(rec.timestamp);
@@ -658,7 +769,7 @@ function initForms() {
 
       let payload = {
         id: recordId,
-        timestamp: currentDateVal,
+        timestamp: new Date(currentDateVal).toISOString(),
         hiveNum: String(currentHive),
         updatedAt: nowTime,
         syncStatus: 'pending_save'
@@ -671,7 +782,7 @@ function initForms() {
           pokarm: document.querySelector('input[name="pokarm"]:checked')?.value || '',
           ramkiCzerwiu: document.getElementById('ramki-czerwiu')?.value || '0',
           rodzina: document.querySelector('input[name="rodzina"]:checked')?.value || '',
-          polkorpus: document.querySelector('input[name="polkorpus"]:checked')?.value || '0',
+          polkorpus: document.getElementById('polkorpus') ? document.getElementById('polkorpus').value : (document.querySelector('input[name="polkorpus"]:checked')?.value || '0'),
           dzialania: document.getElementById('input-dzialania')?.value || '',
           przyszleDzialania: document.getElementById('input-przyszle-dzialania')?.value || ''
         };
@@ -725,7 +836,6 @@ function editRecord(id, type) {
   const record = state[type + 's'].find(r => r.id === id);
   if (!record) return;
 
-  // Jeśli to niezależna notatka z zakładki ZROBIĆ, otwórz ją w formularzu ZROBIĆ
   if (type === 'inspection' && isStandaloneNote(record)) {
     editStandaloneTodo(id);
     return;
@@ -814,18 +924,45 @@ function goToHistory(pluralType) {
   }, 100);
 }
 
-function saveQueenNote(hiveNum) {
+// DWUKIERUNKOWY ZAPIS I SYNCHRONIZACJA OPISU MATKI PRZEZ GOOGLE SHEETS
+async function saveQueenNote(hiveNum) {
   const input = document.getElementById(`queen-note-${hiveNum}`);
   if (!input) return;
+  const noteText = input.value.trim();
+  const recordId = `queen_hive_${hiveNum}`;
+
   try {
-    localStorage.setItem(`pasieka_queen_${hiveNum}`, input.value.trim());
-    showToast(`Zapisano opis matki dla Ula ${hiveNum} 👑`, 'success');
-  } catch (e) {
-    showToast('Błąd zapisu opisu matki', 'error');
-  }
+    localStorage.setItem(`pasieka_queen_${hiveNum}`, noteText);
+  } catch (e) {}
+
+  const payload = {
+    id: recordId,
+    timestamp: new Date().toISOString(),
+    hiveNum: String(hiveNum),
+    rodzina: 'OPIS_MATKI',
+    matka: 'TAK',
+    jaja: 'TAK',
+    ramkiCzerwiu: '0',
+    pokarm: 'OK',
+    polkorpus: '0',
+    dzialania: noteText,
+    przyszleDzialania: '',
+    updatedAt: Date.now().toString(),
+    syncStatus: 'pending_save'
+  };
+
+  await saveLocalRecord('inspection', payload);
+  await loadStateFromLocal();
+  showToast(`Zapisano opis matki dla Ula ${hiveNum} 👑 (Synchronizuję...)`, 'success');
+  if (navigator.onLine) syncData(false);
 }
 
 function getQueenNote(hiveNum) {
+  const rec = (state.inspections || []).find(r => r.id === `queen_hive_${hiveNum}` && r.syncStatus !== 'pending_delete');
+  if (rec && rec.dzialania !== undefined) {
+    try { localStorage.setItem(`pasieka_queen_${hiveNum}`, rec.dzialania); } catch (e) {}
+    return rec.dzialania;
+  }
   try { return localStorage.getItem(`pasieka_queen_${hiveNum}`) || ''; } catch (e) { return ''; }
 }
 
@@ -843,7 +980,7 @@ function initHives() {
             <div class="queen-note-box">
               <span>👑</span>
               <input type="text" id="queen-note-${i}" value="${qNote}" placeholder="Opis matki (np. Krainka 25)" onchange="saveQueenNote(${i})">
-              <button type="button" class="btn-queen-save" onclick="saveQueenNote(${i})" title="Zapisz opis matki">💾</button>
+              <button type="button" class="btn-queen-save" onclick="saveQueenNote(${i})" title="Zapisz i synchronizuj opis matki">💾</button>
             </div>
           </div>
           <div id="hive-desc-${i}" style="margin: 8px 0; min-height: 4.5rem;">
@@ -866,11 +1003,17 @@ function initHives() {
 
 function updateHiveCards() {
   for (let i = 1; i <= 18; i++) {
+    // 1. Odśwież nazwę matki w polu input (jeśli użytkownik akurat w nim nie pisze)
+    const qInput = document.getElementById(`queen-note-${i}`);
+    if (qInput && document.activeElement !== qInput) {
+      qInput.value = getQueenNote(i);
+    }
+
+    // 2. Odśwież podsumowanie ostatniego fizycznego przeglądu
     let descDiv = document.getElementById(`hive-desc-${i}`);
     if (!descDiv) continue;
-    // Ignorujemy niezależne notatki przy wyświetlaniu ostatniego fizycznego przeglądu ula
     let hiveInspections = state.inspections
-      .filter(r => String(r.hiveNum) === String(i) && r.syncStatus !== 'pending_delete' && !isStandaloneNote(r))
+      .filter(r => String(r.hiveNum) === String(i) && r.syncStatus !== 'pending_delete' && !isSystemInspectionRecord(r))
       .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     
     if (hiveInspections.length > 0) {
@@ -967,9 +1110,8 @@ function sortTableBy(pluralType, key) {
 function getSortedRecords(pluralType) {
   const cfg = sortConfig[pluralType];
   let list = (state[pluralType] || []).filter(r => r.syncStatus !== 'pending_delete');
-  // W tabeli przeglądów uli ukrywamy niezależne notatki ogólne (są widoczne w zakładce ZROBIĆ)
   if (pluralType === 'inspections') {
-    list = list.filter(r => !isStandaloneNote(r));
+    list = list.filter(r => !isSystemInspectionRecord(r));
   }
   return list.sort((a, b) => {
     let valA = a[cfg.key];
@@ -1114,7 +1256,7 @@ function renderLocalHistory(type, hiveNum) {
   const container = document.getElementById(`local-${type}-history`);
   if (!container) return;
   let data = (state[type + 's'] || [])
-    .filter(d => String(d.hiveNum) === String(hiveNum) && d.syncStatus !== 'pending_delete' && !(type === 'inspection' && isStandaloneNote(d)))
+    .filter(d => String(d.hiveNum) === String(hiveNum) && d.syncStatus !== 'pending_delete' && !(type === 'inspection' && isSystemInspectionRecord(d)))
     .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
   if (data.length === 0) {
@@ -1225,18 +1367,18 @@ function renderLocalHistory(type, hiveNum) {
   }
 }
 
-// RENDEROWANIE ZADAŃ I NOTATEK W ZAKŁADCE ZROBIĆ (Z SYNCHRONIZACJĄ STATUSU [X])
+// RENDEROWANIE ZADAŃ I NOTATEK W ZAKŁADCE ZROBIĆ
 function renderTodos() {
   const ul = document.getElementById('todo-list');
   if (!ul) return;
   let todos = state.inspections.filter(i => {
     if (i.syncStatus === 'pending_delete') return false;
+    if (isQueenRecord(i)) return false;
     const val = cleanTodoText(i.przyszleDzialania);
     const lower = val.toLowerCase();
     return val.length > 0 && lower !== '0' && lower !== 'brak' && lower !== 'brak planów' && lower !== 'brak planu' && lower !== 'brak uwag' && lower !== 'brak dzialan' && lower !== 'brak działań' && lower !== 'nie' && lower !== '-';
   });
 
-  // Sortowanie: najpierw zadania NIEWYKONANE, potem wykonane; wewnątrz grupy według daty
   todos.sort((a, b) => {
     const doneA = isTodoDone(a) ? 1 : 0;
     const doneB = isTodoDone(b) ? 1 : 0;
@@ -1258,7 +1400,7 @@ function renderTodos() {
       ? 'background:#059669; color:white; border:2px solid #047857;' 
       : 'background:white; color:#111827; border:2px solid #374151;';
 
-    const targetBadgeLabel = getTodoTargetLabel(t.hiveNum);
+    const targetBadgeLabel = standalone ? getTodoTargetLabel(t) : `Ul ${t.hiveNum}`;
     const badgeColor = standalone 
       ? 'background:#d1fae5; color:#065f46; border:1px solid #34d399;' 
       : 'background:#fef3c7; color:#92400e;';
@@ -1303,10 +1445,9 @@ async function toggleTodo(id) {
   const newDone = !currentlyDone;
   const cleanText = cleanTodoText(rec.przyszleDzialania);
 
-  // Zapisujemy znacznik [X] bezpośrednio w polu przyszleDzialania, aby zsynchronizował się z Arkuszem Google i drugim urządzeniem
   rec.przyszleDzialania = newDone ? `[X] ${cleanText}` : cleanText;
   if (isStandaloneNote(rec)) {
-    rec.dzialania = newDone ? 'WYKONANE' : '';
+    rec.dzialania = newDone ? 'WYKONANE' : 'DO ZROBIENIA';
   }
   rec.updatedAt = Date.now().toString();
   rec.syncStatus = 'pending_save';
