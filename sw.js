@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pasieka-v6-sync';
+const CACHE_NAME = 'pasieka-v7-sync';
 const ASSETS = [
   './',
   './index.html',
@@ -9,10 +9,10 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (e) => {
-  self.skipWaiting();
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
   );
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', (e) => {
@@ -28,7 +28,6 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
-// Strategia Network-First (jak we wczorajszej wersji v5) - zawsze pobiera świeży kod jeśli jest internet
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET' || e.request.url.includes('script.google.com')) {
     return;
