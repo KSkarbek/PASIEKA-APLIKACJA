@@ -57,7 +57,6 @@
   
   <!-- ZAKŁADKA ZROBIĆ Z NIEZALEŻNYM FORMULARZEM NOTATEK -->
   <section id="tab-todo" class="tab-content">
-    <!-- Karta formularza dodawania niezależnej notatki / zadania -->
     <div class="card form-card" style="margin-bottom: 16px; border: 2px solid #059669;">
       <div class="card-header" style="background: #059669; color: #ffffff;">
         <h2 id="todo-form-title">➕ Dodaj Notatkę / Zadanie do Zrobienia</h2>
@@ -68,10 +67,10 @@
           <div class="form-group flex-1">
             <label for="select-todo-target">Dotyczy (Pasieka / Ul):</label>
             <select id="select-todo-target" class="input-control select-lg" required>
-              <option value="99" selected>🐝 Ogólna (Cała Pasieka)</option>
-              <option value="91">🏡 Pasieka DOM (Ule 1-6)</option>
-              <option value="92">🌾 Pasieka ZBIÓR (Ule 7-12)</option>
-              <option value="93">🌲 Pasieka LAS (Ule 13-18)</option>
+              <option value="CAŁA PASIEKA" selected>🐝 Ogólna (Cała Pasieka)</option>
+              <option value="PASIEKA DOM">🏡 Pasieka DOM (Ule 1-6)</option>
+              <option value="PASIEKA ZBIÓR">🌾 Pasieka ZBIÓR (Ule 7-12)</option>
+              <option value="PASIEKA LAS">🌲 Pasieka LAS (Ule 13-18)</option>
               <option value="1">Ul 1 (DOM)</option>
               <option value="2">Ul 2 (DOM)</option>
               <option value="3">Ul 3 (DOM)</option>
@@ -111,13 +110,12 @@
       </form>
     </div>
 
-    <!-- Lista wszystkich zadań i notatek -->
     <div class="card">
       <div class="card-header" style="background: #d1fae5; color: #065f46;">
         <h2>📋 Lista Zadań i Notatek (Z przeglądów oraz niezależnych)</h2>
       </div>
       <p style="padding: 10px 14px 0; color: #4b5563; font-size: 0.9rem; margin: 0;">
-        Kliknij kwadracik, aby oznaczyć zadanie jako wykonane <b>[X]</b> (status synchronizuje się między urządzeniami). Niewykonane zadania są zawsze na górze.
+        Kliknij kwadracik, aby oznaczyć zadanie jako wykonane <b>[X]</b> (status synchronizuje się z Arkuszem Google). Niewykonane zadania są zawsze na górze.
       </p>
       <ul id="todo-list" style="list-style: none; padding: 12px; margin: 0;"></ul>
     </div>
@@ -362,14 +360,14 @@
         </div>
       </div>
 
-      <details class="webhook-details margin-top-md">
+      <details class="webhook-details margin-top-md" open>
         <summary class="webhook-summary">⚙️ Ustawienia Połączenia Google Sheets (Webhook URL)</summary>
         <div class="webhook-content">
           <div style="display:flex; gap:8px; margin-top:8px;">
             <input type="text" id="input-webhook-url" class="input-control" placeholder="Wklej link z Google Apps Script (https://script.google.com/.../exec)">
             <button type="button" id="btn-save-webhook" class="btn-small" style="background:#d97706; color:white; border:none; padding:8px 16px; font-weight:bold;">Zapisz</button>
           </div>
-          <small style="color:#78350f; margin-top:4px; display:block;">Adres wdrożonego skryptu Webhook z Google Sheets. Pozwala synchronizować dane dwukierunkowo.</small>
+          <small style="color:#78350f; margin-top:4px; display:block;">Adres wdrożonego skryptu Webhook z Google Sheets. Aby nigdy nie zniknął po czyszczeniu przeglądarki, możesz go również wkleić w pliku <b>app.js</b> w 3 linijce (DEFAULT_WEBHOOK).</small>
         </div>
       </details>
 
