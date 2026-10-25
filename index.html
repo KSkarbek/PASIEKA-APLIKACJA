@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PASIEKA - Asystent Pasieki</title>
+  <title>PASIEKA v8.0 - Asystent Pasieki</title>
 
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐝</text></svg>">
   <meta name="theme-color" content="#d97706">
@@ -13,7 +13,8 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
-  <link rel="stylesheet" href="styles.css">
+  <!-- Wymuszenie ominięcia starego cache CSS -->
+  <link rel="stylesheet" href="styles.css?v=8.0">
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
@@ -22,7 +23,7 @@
     <div class="logo-area">
       <span class="bee-icon">🐝</span>
       <div>
-        <h1>PASIEKA</h1>
+        <h1>PASIEKA <span style="background:#059669; color:#fff; font-size:0.75rem; padding:2px 8px; border-radius:10px; vertical-align:middle;">v8.0</span></h1>
         <p class="subtitle">Ewidencja 18 uli • 3 Pasieki</p>
       </div>
     </div>
@@ -343,9 +344,10 @@
   <section id="tab-sheet" class="tab-content">
     <div class="card sheet-card">
       <div class="sheet-toolbar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
-        <div><h2>Arkusz Kalkulacyjny i Synchronizacja</h2></div>
-        <div>
-          <button id="btn-sync-now" class="btn-primary" style="padding:10px 20px;">🔄 Synchronizuj Teraz</button>
+        <div><h2>Arkusz Kalkulacyjny i Synchronizacja (v8.0)</h2></div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button id="btn-sync-now" class="btn-primary" style="padding:10px 20px; width:auto;">🔄 Synchronizuj Teraz</button>
+          <button type="button" onclick="forceHardResetCache()" class="btn-small" style="background:#dc2626; color:white; border:none; padding:10px 14px;">⚠️ Reset Pamięci Cache (Napraw)</button>
         </div>
       </div>
 
@@ -367,7 +369,7 @@
             <input type="text" id="input-webhook-url" class="input-control" placeholder="Wklej link z Google Apps Script (https://script.google.com/.../exec)">
             <button type="button" id="btn-save-webhook" class="btn-small" style="background:#d97706; color:white; border:none; padding:8px 16px; font-weight:bold;">Zapisz</button>
           </div>
-          <small style="color:#78350f; margin-top:4px; display:block;">Adres wdrożonego skryptu Webhook z Google Sheets. Aby nigdy nie zniknął po czyszczeniu przeglądarki, możesz go również wkleić w pliku <b>app.js</b> w 3 linijce (DEFAULT_WEBHOOK).</small>
+          <small style="color:#78350f; margin-top:4px; display:block;">Upewnij się, że powyżej wklejony jest Twój link zakończony na <b>/exec</b>.</small>
         </div>
       </details>
 
@@ -419,16 +421,32 @@
     </div>
   </section>
 
-  <!-- Rejestracja Service Workera -->
+  <!-- AUTOMATYCZNE CZYSZCZENIE STAREGO SERVICE WORKERA W BRAVE -->
   <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js')
-          .then(reg => console.log('Service Worker zarejestrowany poprawnie.', reg))
-          .catch(err => console.error('Błąd rejestracji Service Workera.', err));
-      });
-    }
+    (async function cleanOldServiceWorkers() {
+      const CURRENT_VER = '8.0';
+      try {
+        const savedVer = localStorage.getItem('pasieka_app_version');
+        if (savedVer !== CURRENT_VER) {
+          if ('serviceWorker' in navigator) {
+            const regs = await navigator.serviceWorker.getRegistrations();
+            for (let r of regs) { await r.unregister(); }
+          }
+          if ('caches' in window) {
+            const keys = await caches.keys();
+            for (let k of keys) { await caches.delete(k); }
+          }
+          localStorage.setItem('pasieka_app_version', CURRENT_VER);
+          console.log('Wyczyszczono stary cache Service Workera. Wersja:', CURRENT_VER);
+        }
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.register('./sw.js?v=8.0');
+        }
+      } catch (e) {
+        console.warn('Błąd czyszczenia SW:', e);
+      }
+    })();
   </script>
-  <script src="app.js"></script>
+  <script src="app.js?v=8.0"></script>
 </body>
 </html>
