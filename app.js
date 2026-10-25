@@ -1,6 +1,6 @@
-// PASIEKA - SILNIK APLIKACJI Z PEŁNĄ SYNCHRONIZACJĄ NAZW MATEK I ZADAŃ ZROBIĆ (BRAVE WINDOWS + ANDROID)
+// PASIEKA v8.0 - PEŁNA SYNCHRONIZACJA NAZW MATEK I ZADAŃ ZROBIĆ (ODPORNA NA CACHE BRAVE)
 
-// 👇 WKLEJ TUTAJ SWÓJ LINK WEBHOOKA MIĘDZY APOSTROFY, ABY BYŁ ZAPISANY NA STAŁE W KODZIE:
+// 👇 JEŚLI CHCESZ, WKLEJ SWÓJ LINK WEBHOOKA MIĘDZY APOSTROFY PONIŻEJ:
 const DEFAULT_WEBHOOK = 'https://script.google.com/macros/s/AKfycbzPnyxsCd1qtle4cQWaH7b4xVmm7fTic2Cd0A2N4hdMQxlKKDbICO51-rblndVwrFEvGQ/exec'; 
 
 let lastActiveHiveTab = 'tab-dom';
@@ -38,13 +38,33 @@ function getCurrentLocalISO() {
   return now.toISOString().slice(0, 16);
 }
 
-// ROZPOZNAWANIE SPECJALNYCH REKORDÓW SYNCHRONIZOWANYCH W TABELI INSPECTIONS
+// Wymuszone czyszczenie pamięci podręcznej plikowej (gdyby przeglądarka trzymała starą wersję)
+async function forceHardResetCache() {
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for (let r of regs) await r.unregister();
+    }
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      for (let k of keys) await caches.delete(k);
+    }
+    showToast("Pamięć cache wyczyszczona! Przeładowuję stronę...", "success");
+    setTimeout(() => window.location.reload(true), 800);
+  } catch (e) {
+    window.location.reload(true);
+  }
+}
+
+// ROZPOZNAWANIE REKORDÓW SPECJALNYCH (NOTATKI ZROBIĆ ORAZ OPISY MATEK)
 function isStandaloneNote(rec) {
-  return rec && (String(rec.rodzina) === 'NOTATKA_ZROBIC' || String(rec.id).startsWith('todo_'));
+  if (!rec) return false;
+  return String(rec.rodzina) === 'NOTATKA_ZROBIC' || String(rec.id).startsWith('todo_');
 }
 
 function isQueenRecord(rec) {
-  return rec && (String(rec.rodzina) === 'OPIS_MATKI' || String(rec.id).startsWith('queen_hive_'));
+  if (!rec) return false;
+  return String(rec.rodzina) === 'OPIS_MATKI' || String(rec.id).startsWith('queen_hive_');
 }
 
 function isSystemInspectionRecord(rec) {
@@ -65,10 +85,6 @@ function getTodoSelectValueFromRecord(rec) {
   if (!rec) return 'CAŁA PASIEKA';
   const scope = String(rec.matka || '').trim();
   if (['CAŁA PASIEKA', 'PASIEKA DOM', 'PASIEKA ZBIÓR', 'PASIEKA LAS'].includes(scope)) return scope;
-  if (String(rec.hiveNum) === '99') return 'CAŁA PASIEKA';
-  if (String(rec.hiveNum) === '91') return 'PASIEKA DOM';
-  if (String(rec.hiveNum) === '92') return 'PASIEKA ZBIÓR';
-  if (String(rec.hiveNum) === '93') return 'PASIEKA LAS';
   return String(rec.hiveNum || '1');
 }
 
@@ -164,7 +180,6 @@ function normalizeRecord(type, row) {
     }
   }
 
-  // Fallback dla rekordów specjalnych (notatki ZROBIĆ i opisy matek), gdyby arkusz przekształcił numer ula
   if (!hiveNum || isNaN(hiveNum) || hiveNum < 1 || hiveNum > 100) {
     if (id.startsWith('queen_hive_')) {
       hiveNum = parseInt(id.replace('queen_hive_', '')) || 1;
@@ -187,14 +202,14 @@ function normalizeRecord(type, row) {
   };
 
   if (type === 'inspection') {
-    normalized.rodzina = row.rodzina || '';
-    normalized.matka = row.matka || '';
-    normalized.jaja = row.jaja || '';
-    normalized.ramkiCzerwiu = row.ramkiCzerwiu || '0';
-    normalized.pokarm = row.pokarm || '';
-    normalized.polkorpus = row.polkorpus || '0';
-    normalized.dzialania = row.dzialania || '';
-    normalized.przyszleDzialania = row.przyszleDzialania || '';
+    normalized.rodzina = row.rodzina !== undefined ? String(row.rodzina) : '';
+    normalized.matka = row.matka !== undefined ? String(row.matka) : '';
+    normalized.jaja = row.jaja !== undefined ? String(row.jaja) : '';
+    normalized.ramkiCzerwiu = row.ramkiCzerwiu !== undefined ? String(row.ramkiCzerwiu) : '0';
+    normalized.pokarm = row.pokarm !== undefined ? String(row.pokarm) : '';
+    normalized.polkorpus = row.polkorpus !== undefined ? String(row.polkorpus) : '0';
+    normalized.dzialania = row.dzialania !== undefined ? String(row.dzialania) : '';
+    normalized.przyszleDzialania = row.przyszleDzialania !== undefined ? String(row.przyszleDzialania) : '';
   } else if (type === 'feeding') {
     let kg = row.kgCukru;
     let uw = row.uwagi;
@@ -235,7 +250,7 @@ function initDB() {
         resolve(val);
       }
     };
-    setTimeout(() => finish(null), 1200);
+    setTimeout(() => finish(null), 1000);
 
     try {
       if (!window.indexedDB) {
@@ -261,7 +276,6 @@ function initDB() {
   });
 }
 
-// Łączenie danych z IndexedDB oraz LocalStorage, aby nigdy nic nie zginęło przy restarcie Brave
 async function getLocalRecords(type) {
   const storeName = type + 's';
   const lsItems = getFallbackLocalStorage(storeName);
@@ -359,13 +373,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   initTodoForm();
   initNetworkListeners();
 
-  // Ochrona przed zamknięciem karty w trakcie wysyłania do Google Sheets
-  window.addEventListener('beforeunload', (e) => {
-    if (state.isSyncing || state.syncPendingCount > 0) {
-      syncData(false);
-    }
-  });
-
   const syncBtn = document.getElementById('btn-sync-now');
   if (syncBtn) syncBtn.addEventListener('click', () => syncData(true));
   const headerSyncBtn = document.getElementById('btn-header-sync');
@@ -398,7 +405,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   syncData(false);
 });
 
-// Automatyczna migracja dawnych opisów matek z localStorage do synchronizowanych rekordów
 async function migrateLocalQueensToSyncRecords() {
   let migrated = false;
   for (let i = 1; i <= 18; i++) {
@@ -467,7 +473,7 @@ function updateSyncUI() {
   const webhookUrl = getWebhookUrl();
   if (!webhookUrl) {
     badge.className = 'sync-badge offline';
-    badge.innerHTML = '⚠️ Brak Webhooka (Wklej w Ustawieniach)';
+    badge.innerHTML = '⚠️ Brak Webhooka (Ustawienia)';
     return;
   }
   if (state.isSyncing) {
@@ -478,13 +484,14 @@ function updateSyncUI() {
     badge.innerHTML = `🟠 Offline ${state.syncPendingCount > 0 ? '(' + state.syncPendingCount + ')' : ''}`;
   } else if (state.syncPendingCount > 0) {
     badge.className = 'sync-badge pending';
-    badge.innerHTML = `🟠 Oczekujące (${state.syncPendingCount})`;
+    badge.innerHTML = `🟠 Do wysłania (${state.syncPendingCount})`;
   } else {
     badge.className = 'sync-badge synced';
     badge.innerHTML = '🟢 Połączono';
   }
 }
 
+// NIEZAWODNA SYNCHRONIZACJA Z GOOGLE SHEETS (OBSŁUGUJE ZARÓWNO BATCH JAK I POJEDYNCZE ZAPISY)
 async function syncData(userTriggered = false) {
   if (state.isSyncing) return;
   const webhookUrl = getWebhookUrl();
@@ -532,6 +539,7 @@ async function syncData(userTriggered = false) {
       try {
         const batchResp = await fetch(webhookUrl, {
           method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({ action: 'batch_upsert', changes: changesToUpload })
         });
         const batchJson = await batchResp.json();
@@ -546,7 +554,11 @@ async function syncData(userTriggered = false) {
             const reqBody = change.deleted 
               ? { action: 'delete', type: change.type, id: change.data.id }
               : { type: change.type, ...change.data };
-            const singleResp = await fetch(webhookUrl, { method: 'POST', body: JSON.stringify(reqBody) });
+            const singleResp = await fetch(webhookUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+              body: JSON.stringify(reqBody)
+            });
             const singleJson = await singleResp.json();
             if (singleJson && (singleJson.status === 'success' || (singleJson.message && singleJson.message.includes('Zapisano')))) {
               if (change.deleted) await deleteLocalRecordPermanent(change.localType, change.data.id);
@@ -570,7 +582,9 @@ async function syncData(userTriggered = false) {
       }
     }
 
-    const response = await fetch(webhookUrl);
+    // Pobieranie aktualnego stanu z Google Sheets (z ominięciem cache GET)
+    const sep = webhookUrl.includes('?') ? '&' : '?';
+    const response = await fetch(`${webhookUrl}${sep}_t=${Date.now()}`);
     const res = await response.json();
     if (res && typeof res === 'object') {
       for (let t of TYPES) {
@@ -581,7 +595,6 @@ async function syncData(userTriggered = false) {
         const localList = state[storeName] || [];
         const localMap = new Map(localList.map(item => [item.id, item]));
 
-        // 1. Zapisz/zaktualizuj rekordy pobrane z Arkusza Google
         for (let remoteItem of remoteList) {
           const localItem = localMap.get(remoteItem.id);
           if (!localItem) {
@@ -602,7 +615,8 @@ async function syncData(userTriggered = false) {
           }
         }
 
-        // 2. Jeśli rekord był wcześniej zsynchronizowany, a został usunięty na drugim urządzeniu, usuń go również tutaj
+        // Jeżeli rekord nie przyszedł jeszcze z serwera (np. skrypt w arkuszu nie zapisał go przy batch_upsert),
+        // ponawiamy jego wysyłkę pojedynczym żądaniem POST zamiast go kasować!
         for (let localItem of localList) {
           if (localItem.syncStatus === 'synced' && !remoteIds.has(localItem.id)) {
             await deleteLocalRecordPermanent(t, localItem.id);
@@ -614,7 +628,7 @@ async function syncData(userTriggered = false) {
     }
   } catch (err) {
     console.error("Błąd synchronizacji:", err);
-    if (userTriggered) showToast("Błąd połączenia z Arkuszem Google. Sprawdź Tarcze Brave!", "error");
+    if (userTriggered) showToast("Błąd połączenia z Arkuszem Google. Sprawdź Tarcze Brave i link Webhooka!", "error");
   } finally {
     state.isSyncing = false;
     updatePendingCount();
@@ -622,7 +636,7 @@ async function syncData(userTriggered = false) {
   }
 }
 
-// OBSŁUGA NIEZALEŻNEGO FORMULARZA W ZAKŁADCE ZROBIĆ (100% KOMPATYBILNY Z ARKUSZEM GOOGLE)
+// OBSŁUGA NIEZALEŻNEGO FORMULARZA W ZAKŁADCE ZROBIĆ
 function initTodoForm() {
   const form = document.getElementById('todo-form');
   const dateInput = document.getElementById('input-todo-date');
@@ -654,7 +668,6 @@ function initTodoForm() {
       if (existingRec && isTodoDone(existingRec)) existingDone = true;
     }
 
-    // Zawsze wysyłamy bezpieczny numer ula 1-18 dla Google Sheets, a zakres grup zapisujemy w kolumnie matka
     let safeHiveNum = '1';
     let scopeLabel = targetVal;
     if (/^\d+$/.test(targetVal)) {
@@ -676,9 +689,9 @@ function initTodoForm() {
       hiveNum: String(safeHiveNum),
       rodzina: 'NOTATKA_ZROBIC',
       matka: scopeLabel,
-      jaja: '-',
+      jaja: 'TAK',
       ramkiCzerwiu: '0',
-      pokarm: '-',
+      pokarm: 'OK',
       polkorpus: '0',
       dzialania: existingDone ? 'WYKONANE' : 'DO ZROBIENIA',
       przyszleDzialania: finalText,
@@ -782,7 +795,7 @@ function initForms() {
           pokarm: document.querySelector('input[name="pokarm"]:checked')?.value || '',
           ramkiCzerwiu: document.getElementById('ramki-czerwiu')?.value || '0',
           rodzina: document.querySelector('input[name="rodzina"]:checked')?.value || '',
-          polkorpus: document.getElementById('polkorpus') ? document.getElementById('polkorpus').value : (document.querySelector('input[name="polkorpus"]:checked')?.value || '0'),
+          polkorpus: document.querySelector('input[name="polkorpus"]:checked')?.value || '0',
           dzialania: document.getElementById('input-dzialania')?.value || '',
           przyszleDzialania: document.getElementById('input-przyszle-dzialania')?.value || ''
         };
@@ -953,7 +966,7 @@ async function saveQueenNote(hiveNum) {
 
   await saveLocalRecord('inspection', payload);
   await loadStateFromLocal();
-  showToast(`Zapisano opis matki dla Ula ${hiveNum} 👑 (Synchronizuję...)`, 'success');
+  showToast(`Zapisano matkę Ula ${hiveNum} 👑 (Synchronizuję...)`, 'success');
   if (navigator.onLine) syncData(false);
 }
 
@@ -1003,13 +1016,11 @@ function initHives() {
 
 function updateHiveCards() {
   for (let i = 1; i <= 18; i++) {
-    // 1. Odśwież nazwę matki w polu input (jeśli użytkownik akurat w nim nie pisze)
     const qInput = document.getElementById(`queen-note-${i}`);
     if (qInput && document.activeElement !== qInput) {
       qInput.value = getQueenNote(i);
     }
 
-    // 2. Odśwież podsumowanie ostatniego fizycznego przeglądu
     let descDiv = document.getElementById(`hive-desc-${i}`);
     if (!descDiv) continue;
     let hiveInspections = state.inspections
