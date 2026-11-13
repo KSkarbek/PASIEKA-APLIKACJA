@@ -1,9 +1,9 @@
-const CACHE_NAME = 'pasieka-v9.2-sync';
+const CACHE_NAME = 'pasieka-v9.3-sync';
 const ASSETS = [
   './',
   './index.html',
-  './app.js?v=9.2',
-  './styles.css?v=9.2',
+  './app.js?v=9.3',
+  './styles.css?v=9.3',
   './manifest.json',
   'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'
 ];
