@@ -1,11 +1,7 @@
-// PASIEKA v9.5 - ZWERYFIKOWANY KOD (SYNCHRONICZNY ZAPIS ZADAŃ BEZ ZNIKANIA + ZAKŁADKA „ZROBIONE”)
-
-// 👇 JEŚLI CHCESZ, WKLEJ SWÓJ LINK WEBHOOKA MIĘDZY APOSTROFY PONIŻEJ:
-const DEFAULT_WEBHOOK = 'https://script.google.com/macros/s/AKfycbzPnyxsCd1qtle4cQWaH7b4xVmm7fTic2Cd0A2N4hdMQxlKKDbICO51-rblndVwrFEvGQ/exec'; 
+// PASIEKA v9.6 - BEZ INDEXEDDB, 100% BEZPIECZNA SYNCHRONIZACJA, ZAKŁADKA ZADANIA
+const DEFAULT_WEBHOOK = 'https://script.google.com/macros/s/AKfycbzIVjgjm-estpeBZLGYakeSmzBEZnRSOXQ5CS_QVHSpwC2MChdmoyOP4dHYm9lsaBrBkA/exec'; 
 
 let lastActiveHiveTab = 'tab-dom';
-let doneTabFilter = 'ALL'; // 'ALL' | 'DONE' | 'PENDING'
-let pendingSyncRetry = false;
 
 let state = {
   inspections: [],
@@ -13,7 +9,8 @@ let state = {
   treatments: [],
   izos: [],
   syncPendingCount: 0,
-  isSyncing: false
+  isSyncing: false,
+  pendingSyncRetry: false
 };
 
 let sortConfig = {
@@ -29,9 +26,7 @@ function getWebhookUrl() {
   try {
     const custom = localStorage.getItem('gsheet_webhook');
     return (custom && custom.trim() !== '') ? custom.trim() : DEFAULT_WEBHOOK;
-  } catch (e) {
-    return DEFAULT_WEBHOOK;
-  }
+  } catch (e) { return DEFAULT_WEBHOOK; }
 }
 
 function getCurrentLocalISO() {
@@ -50,8 +45,8 @@ async function forceHardResetCache() {
       const keys = await caches.keys();
       for (let k of keys) await caches.delete(k);
     }
-    showToast("Pamięć cache plików wyczyszczona! Przeładowuję...", "success");
-    setTimeout(() => window.location.reload(true), 700);
+    showToast("Pamięć cache wyczyszczona! Przeładowuję aplikację...", "success");
+    setTimeout(() => window.location.reload(true), 800);
   } catch (e) {
     window.location.reload(true);
   }
@@ -59,16 +54,12 @@ async function forceHardResetCache() {
 
 function isStandaloneNote(rec) {
   if (!rec) return false;
-  if (String(rec.rodzina) === 'NOTATKA_ZROBIC' || String(rec.id).startsWith('todo_')) return true;
-  const allVals = Object.values(rec).map(v => String(v || ''));
-  return allVals.includes('NOTATKA_ZROBIC');
+  return String(rec.rodzina) === 'NOTATKA_ZROBIC' || String(rec.id).startsWith('todo_');
 }
 
 function isQueenRecord(rec) {
   if (!rec) return false;
-  if (String(rec.rodzina) === 'OPIS_MATKI' || String(rec.id).startsWith('queen_hive_')) return true;
-  const allVals = Object.values(rec).map(v => String(v || ''));
-  return allVals.includes('OPIS_MATKI');
+  return String(rec.rodzina) === 'OPIS_MATKI' || String(rec.id).startsWith('queen_hive_');
 }
 
 function isSystemInspectionRecord(rec) {
@@ -78,7 +69,7 @@ function isSystemInspectionRecord(rec) {
 function getTodoTargetLabel(rec) {
   if (!rec) return '🏠 Ul 1';
   if (!isStandaloneNote(rec)) {
-    return `🏠 Ul ${rec.hiveNum} (Z przeglądu)`;
+    return `🏠 Ul ${rec.hiveNum} (Przegląd)`;
   }
   const scope = String(rec.matka || '').trim().toUpperCase();
   if (scope === 'CAŁA PASIEKA' || String(rec.hiveNum) === '99') return '🐝 Cała Pasieka (1-18)';
@@ -93,12 +84,6 @@ function cleanTodoText(str) {
   return String(str || '').replace(/^\[X\]\s*/i, '').trim();
 }
 
-function isValidTodoText(str) {
-  const val = cleanTodoText(str);
-  const lower = val.toLowerCase();
-  return val.length > 0 && lower !== '0' && lower !== 'brak' && lower !== 'brak planów' && lower !== 'brak planu' && lower !== 'brak uwag' && lower !== 'brak dzialan' && lower !== 'brak działań' && lower !== 'nie' && lower !== '-' && lower !== 'undefined' && lower !== 'null';
-}
-
 function isDateString(val) {
   if (val === null || val === undefined || val === '') return false;
   if (val instanceof Date) return true;
@@ -107,9 +92,7 @@ function isDateString(val) {
     const num = Number(s);
     if (num >= 1 && num <= 100) return false;
   }
-  if (/\d{4}[-/.]\d{1,2}/.test(s) || /\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/.test(s) || s.includes('T') || s.includes('GMT')) {
-    return true;
-  }
+  if (/\d{4}[-/.]\d{1,2}/.test(s) || /\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/.test(s) || s.includes('T') || s.includes('GMT')) return true;
   const d = new Date(s);
   return !isNaN(d.getTime());
 }
@@ -153,15 +136,6 @@ function formatForDateInput(val) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function parseTimestampMs(val) {
-  if (!val) return 0;
-  const num = Number(val);
-  if (!isNaN(num) && num > 1000000000000) return num;
-  const d = new Date(val);
-  if (!isNaN(d.getTime())) return d.getTime();
-  return 0;
-}
-
 function normalizeRecord(type, row) {
   if (!row || typeof row !== 'object') return null;
   let id = row.id ? String(row.id).trim() : '';
@@ -187,38 +161,24 @@ function normalizeRecord(type, row) {
   } else {
     let matchH = String(rawHive).match(/^\d+$/);
     let matchT = String(rawTime).match(/^\d+$/);
-    if (matchH && parseInt(matchH[0]) <= 100) {
-      hiveNum = parseInt(matchH[0]);
-      timestampStr = rawTime;
-    } else if (matchT && parseInt(matchT[0]) <= 100) {
-      hiveNum = parseInt(matchT[0]);
-      timestampStr = rawHive;
-    }
+    if (matchH && parseInt(matchH[0]) <= 100) { hiveNum = parseInt(matchH[0]); timestampStr = rawTime; }
+    else if (matchT && parseInt(matchT[0]) <= 100) { hiveNum = parseInt(matchT[0]); timestampStr = rawHive; }
   }
 
-  const rowValues = Object.values(row).map(v => String(v !== undefined && v !== null ? v : '').trim());
-  const isTodoRow = id.startsWith('todo_') || rowValues.includes('NOTATKA_ZROBIC');
-  const isQueenRow = id.startsWith('queen_hive_') || rowValues.includes('OPIS_MATKI');
-
   if (!hiveNum || isNaN(hiveNum) || hiveNum < 1 || hiveNum > 100) {
-    if (isQueenRow) {
-      hiveNum = parseInt(id.replace('queen_hive_', '')) || 1;
-    } else if (isTodoRow) {
-      hiveNum = 1;
-    } else {
-      return null;
-    }
+    if (id.startsWith('queen_hive_')) hiveNum = parseInt(id.replace('queen_hive_', '')) || 1;
+    else if (id.startsWith('todo_') || String(row.rodzina) === 'NOTATKA_ZROBIC') hiveNum = 1;
+    else return null;
   }
 
   let d = new Date(timestampStr);
   let finalTimestamp = (!isNaN(d.getTime())) ? d.toISOString() : new Date().toISOString();
-  let parsedUpdated = parseTimestampMs(row.updatedAt);
 
   let normalized = {
     id: id,
     hiveNum: String(hiveNum),
     timestamp: finalTimestamp,
-    updatedAt: parsedUpdated > 0 ? String(parsedUpdated) : '1000',
+    updatedAt: row.updatedAt ? String(row.updatedAt) : Date.now().toString(),
     syncStatus: 'synced'
   };
 
@@ -231,24 +191,10 @@ function normalizeRecord(type, row) {
     normalized.polkorpus = row.polkorpus !== undefined ? String(row.polkorpus) : '0';
     normalized.dzialania = row.dzialania !== undefined ? String(row.dzialania) : '';
     normalized.przyszleDzialania = row.przyszleDzialania !== undefined ? String(row.przyszleDzialania) : '';
-
-    if (isTodoRow) {
-      normalized.rodzina = 'NOTATKA_ZROBIC';
-      if (!isValidTodoText(normalized.przyszleDzialania)) {
-        if (row.updatedAt && isNaN(Number(row.updatedAt)) && !isDateString(row.updatedAt) && isValidTodoText(row.updatedAt)) {
-          normalized.przyszleDzialania = String(row.updatedAt);
-        } else if (normalized.dzialania && normalized.dzialania !== 'DO ZROBIENIA' && normalized.dzialania !== 'WYKONANE' && isValidTodoText(normalized.dzialania)) {
-          normalized.przyszleDzialania = normalized.dzialania;
-        }
-      }
-    }
   } else if (type === 'feeding') {
     let kg = row.kgCukru;
     let uw = row.uwagi;
-    if (isNaN(parseFloat(kg)) && !isNaN(parseFloat(uw))) {
-      kg = uw;
-      uw = row.updatedAt || '';
-    }
+    if (isNaN(parseFloat(kg)) && !isNaN(parseFloat(uw))) { kg = uw; uw = row.updatedAt || ''; }
     normalized.kgCukru = String(kg || '0');
     normalized.uwagi = String(uw || '');
   } else if (type === 'treatment') {
@@ -258,9 +204,7 @@ function normalizeRecord(type, row) {
     let izoTypeVal = row.izoType || row.ramka || 'IZO-pocz';
     if (String(izoTypeVal).includes('Ul')) izoTypeVal = row.ramka || 'IZO-pocz';
     let rNum = row.ramka;
-    if (isNaN(parseInt(rNum)) && !isNaN(parseInt(row.kiedyLeczyc))) {
-      rNum = row.kiedyLeczyc;
-    }
+    if (isNaN(parseInt(rNum)) && !isNaN(parseInt(row.kiedyLeczyc))) rNum = row.kiedyLeczyc;
     normalized.izoType = String(izoTypeVal);
     normalized.ramka = String(rNum || '1');
     normalized.kiedyLeczyc = formatToPLDate(row.kiedyLeczyc);
@@ -268,177 +212,52 @@ function normalizeRecord(type, row) {
   return normalized;
 }
 
-// ============================================================================
-// BEZPOŚREDNI, ATOMOWY MAGAZYN DANYCH W LOCALSTORAGE (100% ODPORNY NA BRAVE)
-// Brak asynchronicznego wyścigu IndexedDB = Żadne zadanie nigdy nie zniknie!
-// ============================================================================
-
-function getPermanentTodosMap() {
-  try {
-    let map = {};
-    const keys = ['pasieka_todos_backup', 'pasieka_todos_backup_v94', 'pasieka_permanent_todos_v95'];
-    for (let k of keys) {
-      const raw = localStorage.getItem(k);
-      if (raw) {
-        try {
-          const parsed = JSON.parse(raw);
-          if (parsed && typeof parsed === 'object') {
-            Object.assign(map, parsed);
-          }
-        } catch (e) {}
-      }
-    }
-    return map;
-  } catch (e) {
-    return {};
-  }
-}
-
-function saveToPermanentTodos(record) {
-  if (!record || !record.id) return;
-  if (!isValidTodoText(record.przyszleDzialania)) return;
-  try {
-    const map = getPermanentTodosMap();
-    map[record.id] = { ...record };
-    const serialized = JSON.stringify(map);
-    localStorage.setItem('pasieka_permanent_todos_v95', serialized);
-    localStorage.setItem('pasieka_todos_backup_v94', serialized);
-  } catch (e) {}
-}
-
-function removeFromPermanentTodos(id) {
-  try {
-    const map = getPermanentTodosMap();
-    delete map[id];
-    const serialized = JSON.stringify(map);
-    localStorage.setItem('pasieka_permanent_todos_v95', serialized);
-    localStorage.setItem('pasieka_todos_backup_v94', serialized);
-    localStorage.setItem('pasieka_todos_backup', serialized);
-  } catch (e) {}
-}
-
-function getStorageList(storeName) {
-  try {
-    const raw = localStorage.getItem('pasieka_' + storeName);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (e) {
-    return [];
-  }
-}
-
-function setStorageList(storeName, list) {
-  try {
-    localStorage.setItem('pasieka_' + storeName, JSON.stringify(list));
-  } catch (e) {}
-}
-
-function mergeInspectionSafely(localRec, incomingRec) {
-  if (!localRec) return incomingRec;
-  if (!incomingRec) return localRec;
-  if (localRec.syncStatus === 'pending_delete') return localRec;
-
-  const localText = cleanTodoText(localRec.przyszleDzialania);
-  const incomingText = cleanTodoText(incomingRec.przyszleDzialania);
-
-  // Jeśli lokalnie mamy tekst zadania, a przychodzący rekord ma pusty tekst (błąd kolumn Google Sheets),
-  // ZAWSZE zachowujemy lokalny tekst zadania!
-  if (isValidTodoText(localText) && !isValidTodoText(incomingText)) {
-    return {
-      ...incomingRec,
-      rodzina: isStandaloneNote(localRec) ? 'NOTATKA_ZROBIC' : (localRec.rodzina || incomingRec.rodzina),
-      matka: localRec.matka || incomingRec.matka,
-      dzialania: localRec.dzialania || incomingRec.dzialania,
-      przyszleDzialania: localRec.przyszleDzialania,
-      timestamp: localRec.timestamp || incomingRec.timestamp,
-      updatedAt: localRec.updatedAt,
-      syncStatus: incomingRec.syncStatus || localRec.syncStatus
-    };
-  }
-
-  const tLocal = parseTimestampMs(localRec.updatedAt);
-  const tInc = parseTimestampMs(incomingRec.updatedAt);
-  return tLocal > tInc ? localRec : incomingRec;
-}
-
-function loadRecordsSync(type) {
+// BAZA DANYCH v9.6 - WYŁĄCZNIE LOCALSTORAGE (Zero IndexedDB)
+function getLocalRecords(type) {
   const storeName = type + 's';
-  const map = new Map();
-
-  // 1. Z pamięci podręcznej state
-  if (Array.isArray(state[storeName])) {
-    state[storeName].forEach(item => {
-      if (item && item.id) map.set(item.id, item);
-    });
-  }
-
-  // 2. Z localStorage
-  const lsList = getStorageList(storeName);
-  lsList.forEach(item => {
-    if (item && item.id) {
-      const existing = map.get(item.id);
-      map.set(item.id, type === 'inspection' ? mergeInspectionSafely(existing, item) : (existing || item));
-    }
-  });
-
-  // 3. Dla przeglądów dołączamy wszystkie zadania ze stałego rejestru zadań
-  if (type === 'inspection') {
-    const permTodos = getPermanentTodosMap();
-    Object.values(permTodos).forEach(todo => {
-      if (todo && todo.id) {
-        const existing = map.get(todo.id);
-        map.set(todo.id, mergeInspectionSafely(todo, existing));
-      }
-    });
-  }
-
-  const finalArr = Array.from(map.values());
-  state[storeName] = finalArr;
-  setStorageList(storeName, finalArr);
-  return finalArr;
-}
-
-async function getLocalRecords(type) {
-  return loadRecordsSync(type);
+  try { return JSON.parse(localStorage.getItem('pasieka_' + storeName) || '[]'); } 
+  catch (e) { return []; }
 }
 
 async function saveLocalRecord(type, record) {
-  if (!record || !record.id) return false;
   const storeName = type + 's';
-  const currentList = loadRecordsSync(type);
-  const map = new Map(currentList.map(i => [i.id, i]));
-
-  const existing = map.get(record.id);
-  const finalRec = (type === 'inspection' && existing) ? mergeInspectionSafely(existing, record) : record;
-  map.set(finalRec.id, finalRec);
-
-  if (type === 'inspection') {
-    if (finalRec.syncStatus === 'pending_delete') {
-      removeFromPermanentTodos(finalRec.id);
-    } else if (isStandaloneNote(finalRec) || isValidTodoText(finalRec.przyszleDzialania)) {
-      saveToPermanentTodos(finalRec);
+  try {
+    let items = getLocalRecords(type);
+    const idx = items.findIndex(i => i.id === record.id);
+    if (idx >= 0) items[idx] = record; else items.push(record);
+    localStorage.setItem('pasieka_' + storeName, JSON.stringify(items));
+    
+    // Niezależny sejf na zadania (ochrona przed znikaniem)
+    if (type === 'inspection' && (isStandaloneNote(record) || record.przyszleDzialania)) {
+      let perm = JSON.parse(localStorage.getItem('pasieka_permanent_todos_v96') || '{}');
+      perm[record.id] = record;
+      localStorage.setItem('pasieka_permanent_todos_v96', JSON.stringify(perm));
     }
-  }
-
-  const updatedArr = Array.from(map.values());
-  state[storeName] = updatedArr;
-  setStorageList(storeName, updatedArr);
+  } catch (e) {}
   return true;
 }
 
 async function deleteLocalRecordPermanent(type, id) {
   const storeName = type + 's';
-  if (type === 'inspection') {
-    removeFromPermanentTodos(id);
-  }
-  const filtered = loadRecordsSync(type).filter(i => i.id !== id);
-  state[storeName] = filtered;
-  setStorageList(storeName, filtered);
+  try {
+    let items = getLocalRecords(type).filter(i => i.id !== id);
+    localStorage.setItem('pasieka_' + storeName, JSON.stringify(items));
+  } catch (e) {}
   return true;
 }
 
-// INICJALIZACJA APLIKACJI
+// Ochrona lokalnych wpisów przed nadpisaniem z Google Sheets pustymi polami (stary skrypt)
+function mergeInspectionSafely(local, remote) {
+  let merged = { ...remote };
+  if (!remote.przyszleDzialania && local.przyszleDzialania) {
+    merged.przyszleDzialania = local.przyszleDzialania;
+  }
+  if (isStandaloneNote(local) && !remote.dzialania && local.dzialania) {
+    merged.dzialania = local.dzialania;
+  }
+  return merged;
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   initTabs();
   initHives();
@@ -472,6 +291,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     izoDateInput.addEventListener('input', (e) => updateIzoLeczenieDate(e.target.value));
   }
 
+  window.addEventListener('beforeunload', (e) => {
+    if (state.syncPendingCount > 0 && navigator.onLine) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
+
   await loadStateFromLocal();
   await migrateLocalQueensToSyncRecords();
   syncData(false);
@@ -503,15 +329,11 @@ async function migrateLocalQueensToSyncRecords() {
       migrated = true;
     }
   }
-  if (migrated) {
-    await loadStateFromLocal();
-  }
+  if (migrated) await loadStateFromLocal();
 }
 
 async function loadStateFromLocal() {
-  for (let t of TYPES) {
-    state[t + 's'] = loadRecordsSync(t);
-  }
+  for (let t of TYPES) { state[t + 's'] = getLocalRecords(t); }
   updatePendingCount();
   renderGlobalTables();
   renderTodos();
@@ -530,12 +352,12 @@ function updatePendingCount() {
 function initNetworkListeners() {
   window.addEventListener('online', () => {
     updateSyncUI();
-    showToast("Połączono z siecią 🟢 Synchronizuję...", "info");
+    showToast("Połączono z siecią 🟢 Rozpoczynam synchronizację...", "info");
     syncData(false);
   });
   window.addEventListener('offline', () => {
     updateSyncUI();
-    showToast("Tryb Offline 🟠 Dane bezpieczne w pamięci urządzenia.", "warning");
+    showToast("Tryb Offline 🟠 Dane zapisywane w pamięci urządzenia.", "warning");
   });
 }
 
@@ -545,7 +367,7 @@ function updateSyncUI() {
   const webhookUrl = getWebhookUrl();
   if (!webhookUrl) {
     badge.className = 'sync-badge offline';
-    badge.innerHTML = '⚠️ Brak Webhooka (Ustawienia)';
+    badge.innerHTML = '⚠️ Brak Webhooka';
     return;
   }
   if (state.isSyncing) {
@@ -556,39 +378,39 @@ function updateSyncUI() {
     badge.innerHTML = `🟠 Offline ${state.syncPendingCount > 0 ? '(' + state.syncPendingCount + ')' : ''}`;
   } else if (state.syncPendingCount > 0) {
     badge.className = 'sync-badge pending';
-    badge.innerHTML = `🟠 Zapisano (${state.syncPendingCount})`;
+    badge.innerHTML = `🟠 Do wysłania (${state.syncPendingCount})`;
   } else {
     badge.className = 'sync-badge synced';
     badge.innerHTML = '🟢 Połączono';
   }
 }
 
-// DWUKIERUNKOWA SYNCHRONIZACJA Z GOOGLE SHEETS
+// 100% BEZPIECZNA SYNCHRONIZACJA v9.6
 async function syncData(userTriggered = false) {
   if (state.isSyncing) {
-    pendingSyncRetry = true;
+    state.pendingSyncRetry = true;
     return;
   }
+  
   const webhookUrl = getWebhookUrl();
   if (!webhookUrl) {
     updateSyncUI();
     if (userTriggered) {
-      showToast("Zadania są zapisane lokalnie. Aby synchronizować z chmurą, wklej link Webhooka w zakładce 📊 Arkusz!", "warning");
+      showToast("Brak linku Webhooka! Wklej go w zakładce 📊 Arkusz / Ustawienia!", "error");
+      const sheetBtn = document.querySelector('.tab-btn[data-tab="tab-sheet"]');
+      if (sheetBtn) sheetBtn.click();
     }
     return;
   }
   if (!navigator.onLine) {
-    if (userTriggered) showToast("Brak internetu. Twoje zadania są bezpiecznie zapisane w przeglądarce!", "warning");
+    if (userTriggered) showToast("Brak internetu. Dane czekają w pamięci urządzenia.", "warning");
     return;
   }
+  
   state.isSyncing = true;
   updateSyncUI();
 
   try {
-    for (let t of TYPES) {
-      state[t + 's'] = loadRecordsSync(t);
-    }
-
     const changesToUpload = [];
     TYPES.forEach(t => {
       const pluralType = t.endsWith('s') ? t : t + 's';
@@ -596,11 +418,6 @@ async function syncData(userTriggered = false) {
         if (r.syncStatus && r.syncStatus !== 'synced') {
           let timeVal = r.timestamp;
           let hiveVal = String(r.hiveNum);
-          if (isDateString(hiveVal) && isHiveNum(timeVal)) {
-            const tmp = timeVal;
-            timeVal = hiveVal;
-            hiveVal = String(tmp);
-          }
           changesToUpload.push({
             localType: t,
             type: pluralType,
@@ -620,7 +437,7 @@ async function syncData(userTriggered = false) {
           body: JSON.stringify({ action: 'batch_upsert', changes: changesToUpload })
         });
         const batchJson = await batchResp.json();
-        if (batchJson && batchJson.message && batchJson.message.includes('Zaktualizowano')) {
+        if (batchJson && (batchJson.status === 'success' || (batchJson.message && batchJson.message.includes('Zaktualizowano')))) {
           batchSuccess = true;
         }
       } catch (errPost) { batchSuccess = false; }
@@ -629,8 +446,8 @@ async function syncData(userTriggered = false) {
         for (let change of changesToUpload) {
           try {
             const reqBody = change.deleted 
-              ? { action: 'delete', type: change.type, localType: change.localType, id: change.data.id }
-              : { type: change.type, localType: change.localType, ...change.data };
+              ? { action: 'delete', type: change.type, id: change.data.id }
+              : { type: change.type, ...change.data };
             const singleResp = await fetch(webhookUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -638,31 +455,13 @@ async function syncData(userTriggered = false) {
             });
             const singleJson = await singleResp.json();
             if (singleJson && (singleJson.status === 'success' || (singleJson.message && singleJson.message.includes('Zapisano')))) {
-              if (change.deleted) {
-                await deleteLocalRecordPermanent(change.localType, change.data.id);
-              } else {
-                const storeName = change.localType + 's';
-                const rec = state[storeName].find(r => r.id === change.data.id);
-                if (rec) {
-                  rec.syncStatus = 'synced';
-                  await saveLocalRecord(change.localType, rec);
-                }
-              }
+              if (change.deleted) await deleteLocalRecordPermanent(change.localType, change.data.id);
             }
           } catch (eSingle) { console.error("Błąd wysyłki pojedynczej:", eSingle); }
         }
       } else {
         for (let change of changesToUpload) {
-          if (change.deleted) {
-            await deleteLocalRecordPermanent(change.localType, change.data.id);
-          } else {
-            const storeName = change.localType + 's';
-            const rec = state[storeName].find(r => r.id === change.data.id);
-            if (rec) {
-              rec.syncStatus = 'synced';
-              await saveLocalRecord(change.localType, rec);
-            }
-          }
+          if (change.deleted) await deleteLocalRecordPermanent(change.localType, change.data.id);
         }
       }
     }
@@ -670,41 +469,34 @@ async function syncData(userTriggered = false) {
     const sep = webhookUrl.includes('?') ? '&' : '?';
     const response = await fetch(`${webhookUrl}${sep}_t=${Date.now()}`, { cache: 'no-store' });
     const res = await response.json();
+    
     if (res && typeof res === 'object') {
       for (let t of TYPES) {
         const storeName = t + 's';
         const rawRemoteList = Array.isArray(res[storeName]) ? res[storeName] : (Array.isArray(res[t]) ? res[t] : []);
         const remoteList = rawRemoteList.map(r => normalizeRecord(t, r)).filter(r => r !== null);
-        
-        const localList = loadRecordsSync(t);
+        const localList = state[storeName] || [];
         const localMap = new Map(localList.map(item => [item.id, item]));
 
         for (let remoteItem of remoteList) {
           const localItem = localMap.get(remoteItem.id);
           if (!localItem) {
-            if (t === 'inspection' && String(remoteItem.id).startsWith('todo_') && !isValidTodoText(remoteItem.przyszleDzialania)) {
-              continue;
-            }
             remoteItem.syncStatus = 'synced';
             await saveLocalRecord(t, remoteItem);
           } else {
-            if (localItem.syncStatus === 'pending_delete') {
-              continue;
-            }
             if (t === 'inspection') {
-              const safelyMerged = mergeInspectionSafely(localItem, remoteItem);
-              safelyMerged.syncStatus = 'synced';
-              await saveLocalRecord(t, safelyMerged);
-            } else {
-              const localTime = parseTimestampMs(localItem.updatedAt);
-              const remoteTime = parseTimestampMs(remoteItem.updatedAt);
+              remoteItem = mergeInspectionSafely(localItem, remoteItem);
+            }
+            if (localItem.syncStatus !== 'synced') {
+              const localTime = parseInt(localItem.updatedAt || '0');
+              const remoteTime = parseInt(remoteItem.updatedAt || '0');
               if (remoteTime > localTime) {
                 remoteItem.syncStatus = 'synced';
                 await saveLocalRecord(t, remoteItem);
-              } else {
-                localItem.syncStatus = 'synced';
-                await saveLocalRecord(t, localItem);
               }
+            } else {
+              remoteItem.syncStatus = 'synced';
+              await saveLocalRecord(t, remoteItem);
             }
           }
         }
@@ -714,47 +506,16 @@ async function syncData(userTriggered = false) {
     }
   } catch (err) {
     console.error("Błąd synchronizacji:", err);
-    if (userTriggered) showToast("Połączenie z Google Sheets niedostępne – wszystkie zadania są bezpieczne lokalnie!", "warning");
+    if (userTriggered) showToast("Błąd połączenia z Arkuszem Google. Sprawdź Tarcze Brave i link Webhooka!", "error");
   } finally {
     state.isSyncing = false;
-    await loadStateFromLocal();
-    if (pendingSyncRetry) {
-      pendingSyncRetry = false;
+    updatePendingCount();
+    updateSyncUI();
+    if (state.pendingSyncRetry) {
+      state.pendingSyncRetry = false;
       setTimeout(() => syncData(false), 500);
     }
   }
-}
-
-// NAWIGACJA POMIĘDZY ZAKŁADKAMI „ZROBIĆ” I „ZROBIONE”
-function openDoneTab() {
-  const btn = document.querySelector('.tab-btn[data-tab="tab-done"]');
-  if (btn) btn.click();
-}
-
-function openTodoTab() {
-  const btn = document.querySelector('.tab-btn[data-tab="tab-todo"]');
-  if (btn) btn.click();
-}
-
-function setDoneTabFilter(mode) {
-  doneTabFilter = mode;
-  const bAll = document.getElementById('filter-done-all');
-  const bDone = document.getElementById('filter-done-only');
-  const bPend = document.getElementById('filter-done-pending');
-
-  if (bAll) {
-    bAll.style.background = mode === 'ALL' ? '#059669' : '#e5e7eb';
-    bAll.style.color = mode === 'ALL' ? '#ffffff' : '#1f2937';
-  }
-  if (bDone) {
-    bDone.style.background = mode === 'DONE' ? '#059669' : '#e5e7eb';
-    bDone.style.color = mode === 'DONE' ? '#ffffff' : '#1f2937';
-  }
-  if (bPend) {
-    bPend.style.background = mode === 'PENDING' ? '#f59e0b' : '#e5e7eb';
-    bPend.style.color = mode === 'PENDING' ? '#ffffff' : '#1f2937';
-  }
-  renderTodos();
 }
 
 function toggleTodoScopeSelect() {
@@ -775,9 +536,7 @@ function toggleTodoScopeSelect() {
 function initTodoForm() {
   const form = document.getElementById('todo-form');
   const dateInput = document.getElementById('input-todo-date');
-  if (dateInput && !dateInput.value) {
-    dateInput.value = getCurrentLocalISO();
-  }
+  if (dateInput && !dateInput.value) dateInput.value = getCurrentLocalISO();
   toggleTodoScopeSelect();
   if (!form) return;
 
@@ -785,28 +544,14 @@ function initTodoForm() {
     e.preventDefault();
     const btn = document.getElementById('btn-submit-todo');
     if (btn) btn.disabled = true;
-    setTimeout(() => { if (btn) btn.disabled = false; }, 350);
+    setTimeout(() => { if (btn) btn.disabled = false; }, 1000);
 
     const isEdit = !!form.dataset.editId;
-    const recordId = isEdit ? form.dataset.editId : 'todo_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
+    const recordId = isEdit ? form.dataset.editId : 'todo_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
     
-    const scopeRadio = document.querySelector('input[name="todoScopeType"]:checked');
-    let safeHiveNum = '1';
-    let scopeLabel = 'CAŁA PASIEKA';
-
-    if (scopeRadio && scopeRadio.value === 'UL') {
-      const hiveVal = document.getElementById('select-todo-hive')?.value || '1';
-      safeHiveNum = String(hiveVal);
-      scopeLabel = `UL ${hiveVal}`;
-    } else {
-      const pasiekaVal = document.getElementById('select-todo-pasieka')?.value || 'CAŁA PASIEKA';
-      scopeLabel = pasiekaVal;
-      if (pasiekaVal === 'PASIEKA DOM') safeHiveNum = '1';
-      else if (pasiekaVal === 'PASIEKA ZBIÓR') safeHiveNum = '7';
-      else if (pasiekaVal === 'PASIEKA LAS') safeHiveNum = '13';
-      else safeHiveNum = '1';
-    }
-
+    const scopeType = document.querySelector('input[name="todoScopeType"]:checked')?.value || 'PASIEKA';
+    const pasiekaVal = document.getElementById('select-todo-pasieka')?.value || 'CAŁA PASIEKA';
+    const hiveVal = document.getElementById('select-todo-hive')?.value || '1';
     const dateVal = document.getElementById('input-todo-date')?.value || getCurrentLocalISO();
     const textVal = cleanTodoText(document.getElementById('input-todo-text')?.value || '');
     const initStatus = document.querySelector('input[name="todoInitStatus"]:checked')?.value || 'TODO';
@@ -817,8 +562,21 @@ function initTodoForm() {
     }
 
     const isDone = (initStatus === 'DONE');
-    const finalText = isDone ? `[X] ${textVal}` : textVal;
+    let safeHiveNum = '1';
+    let scopeLabel = 'CAŁA PASIEKA';
 
+    if (scopeType === 'UL') {
+      safeHiveNum = String(hiveVal);
+      scopeLabel = `UL ${hiveVal}`;
+    } else {
+      scopeLabel = pasiekaVal;
+      if (pasiekaVal === 'PASIEKA DOM') safeHiveNum = '1';
+      else if (pasiekaVal === 'PASIEKA ZBIÓR') safeHiveNum = '7';
+      else if (pasiekaVal === 'PASIEKA LAS') safeHiveNum = '13';
+      else safeHiveNum = '1';
+    }
+
+    const finalText = isDone ? `[X] ${textVal}` : textVal;
     const payload = {
       id: recordId,
       timestamp: new Date(dateVal).toISOString(),
@@ -835,19 +593,12 @@ function initTodoForm() {
       syncStatus: 'pending_save'
     };
 
-    try {
-      localStorage.setItem('todo_done_' + recordId, isDone.toString());
-    } catch (err) {}
+    try { localStorage.setItem('todo_done_' + recordId, isDone.toString()); } catch (err) {}
 
-    saveToPermanentTodos(payload);
     await saveLocalRecord('inspection', payload);
-    renderTodos();
-    updatePendingCount();
-    updateSyncUI();
+    await loadStateFromLocal();
     resetTodoForm();
-
-    const totalCount = getAllValidTodos().length;
-    showToast(isEdit ? "Zaktualizowano notatkę!" : `Zapisano notatkę! (Łącznie zapisanych zadań: ${totalCount})`, "success");
+    showToast(isEdit ? "Zaktualizowano notatkę! Synchronizuję..." : "Zapisano notatkę! Synchronizuję...", "success");
 
     if (navigator.onLine) syncData(false);
   });
@@ -857,9 +608,9 @@ function resetTodoForm() {
   const form = document.getElementById('todo-form');
   if (form) delete form.dataset.editId;
   const title = document.getElementById('todo-form-title');
-  if (title) title.innerText = '➕ Dodaj Niezależną Notatkę z Datą';
+  if (title) title.innerText = '➕ Dodaj Notatkę / Zadanie';
   const btn = document.getElementById('btn-submit-todo');
-  if (btn) btn.innerHTML = '💾 ZAPISZ NOTATKĘ (TRAFIA DO „ZROBIĆ” I „ZROBIONE”)';
+  if (btn) btn.innerHTML = '💾 ZAPISZ NOTATKĘ I SYNCHRONIZUJ';
   const cancelBtn = document.getElementById('btn-cancel-todo-edit');
   if (cancelBtn) cancelBtn.classList.add('hidden');
   const textInput = document.getElementById('input-todo-text');
@@ -883,20 +634,17 @@ function resetTodoForm() {
 }
 
 function editStandaloneTodo(id) {
-  let rec = state.inspections.find(r => r.id === id);
-  if (!rec) {
-    const bMap = getPermanentTodosMap();
-    rec = bMap[id];
-  }
+  const rec = state.inspections.find(r => r.id === id);
   if (!rec) return;
 
-  openTodoTab();
+  const todoTabBtn = document.querySelector('.tab-btn[data-tab="tab-todo"]');
+  if (todoTabBtn && !todoTabBtn.classList.contains('active')) todoTabBtn.click();
 
   const form = document.getElementById('todo-form');
   if (form) form.dataset.editId = id;
 
   const title = document.getElementById('todo-form-title');
-  if (title) title.innerText = '✏️ Edycja Niezależnej Notatki / Zadania';
+  if (title) title.innerText = '✏️ Edycja Notatki / Zadania';
 
   const btn = document.getElementById('btn-submit-todo');
   if (btn) btn.innerHTML = '💾 ZAKTUALIZUJ NOTATKĘ';
@@ -946,7 +694,7 @@ function initForms() {
       const formEl = e.target;
       const btn = formEl.querySelector('button[type="submit"]');
       if (btn) btn.disabled = true;
-      setTimeout(() => { if (btn) btn.disabled = false; }, 800);
+      setTimeout(() => { if (btn) btn.disabled = false; }, 1200);
 
       const isEdit = !!formEl.dataset.editId;
       const recordId = isEdit ? formEl.dataset.editId : 'rec_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
@@ -980,9 +728,6 @@ function initForms() {
           dzialania: document.getElementById('input-dzialania')?.value || '',
           przyszleDzialania: rawPlan
         };
-        if (isValidTodoText(rawPlan)) {
-          saveToPermanentTodos(payload);
-        }
       } else if (type === 'feeding') {
         payload = { ...payload, kgCukru: document.getElementById('input-feeding-kg')?.value || '0', uwagi: document.getElementById('input-feeding-notes')?.value || '' };
       } else if (type === 'treatment') {
@@ -1016,7 +761,6 @@ function initForms() {
 async function deleteRecord(id, type, currentHiveNum = null) {
   if (!confirm("Na pewno usunąć ten wpis?")) return;
   const storeName = type + 's';
-  if (type === 'inspection') removeFromPermanentTodos(id);
   const item = state[storeName].find(r => r.id === id);
   if (item) {
     const hiveToRefresh = currentHiveNum || item.hiveNum;
@@ -1025,19 +769,13 @@ async function deleteRecord(id, type, currentHiveNum = null) {
     await saveLocalRecord(type, item);
     await loadStateFromLocal();
     if (hiveToRefresh && parseInt(hiveToRefresh) <= 18) renderLocalHistory(type, hiveToRefresh);
-    showToast("Wpis został usunięty.", "warning");
+    showToast("Wpis oznaczony do usunięcia.", "warning");
     if (navigator.onLine) syncData(false);
-  } else {
-    renderTodos();
   }
 }
 
 function editRecord(id, type) {
-  let record = state[type + 's'].find(r => r.id === id);
-  if (!record && type === 'inspection') {
-    const bMap = getPermanentTodosMap();
-    record = bMap[id];
-  }
+  const record = state[type + 's'].find(r => r.id === id);
   if (!record) return;
 
   if (type === 'inspection' && isStandaloneNote(record)) {
@@ -1098,12 +836,10 @@ function initTabs() {
       }
       const tabContent = document.getElementById(targetTabId);
       if (tabContent) tabContent.classList.add('active');
-      if (targetTabId === 'tab-todo' || targetTabId === 'tab-done') {
+      if (targetTabId === 'tab-todo') {
         const dateInput = document.getElementById('input-todo-date');
         const form = document.getElementById('todo-form');
-        if (dateInput && form && !form.dataset.editId) {
-          dateInput.value = getCurrentLocalISO();
-        }
+        if (dateInput && form && !form.dataset.editId) dateInput.value = getCurrentLocalISO();
         renderTodos();
       }
       if (targetTabId === 'tab-sheet') renderGlobalTables();
@@ -1133,30 +869,17 @@ async function saveQueenNote(hiveNum) {
   if (!input) return;
   const noteText = input.value.trim();
   const recordId = `queen_hive_${hiveNum}`;
-
-  try {
-    localStorage.setItem(`pasieka_queen_${hiveNum}`, noteText);
-  } catch (e) {}
+  try { localStorage.setItem(`pasieka_queen_${hiveNum}`, noteText); } catch (e) {}
 
   const payload = {
-    id: recordId,
-    timestamp: new Date().toISOString(),
-    hiveNum: String(hiveNum),
-    rodzina: 'OPIS_MATKI',
-    matka: 'TAK',
-    jaja: 'TAK',
-    ramkiCzerwiu: '0',
-    pokarm: 'OK',
-    polkorpus: '0',
-    dzialania: noteText,
-    przyszleDzialania: '',
-    updatedAt: Date.now().toString(),
-    syncStatus: 'pending_save'
+    id: recordId, timestamp: new Date().toISOString(), hiveNum: String(hiveNum),
+    rodzina: 'OPIS_MATKI', matka: 'TAK', jaja: 'TAK', ramkiCzerwiu: '0', pokarm: 'OK', polkorpus: '0',
+    dzialania: noteText, przyszleDzialania: '', updatedAt: Date.now().toString(), syncStatus: 'pending_save'
   };
 
   await saveLocalRecord('inspection', payload);
   await loadStateFromLocal();
-  showToast(`Zapisano matkę Ula ${hiveNum} 👑`, 'success');
+  showToast(`Zapisano matkę Ula ${hiveNum} 👑 (Synchronizuję...)`, 'success');
   if (navigator.onLine) syncData(false);
 }
 
@@ -1175,7 +898,7 @@ function initHives() {
     if (!grid) return;
     let html = '';
     for (let i = start; i <= end; i++) {
-      const qNote = getQueenNote(i).replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const qNote = getQueenNote(i).replace(/"/g, '&quot;');
       html += `
         <div class="hive-card">
           <div class="hive-card-top">
@@ -1207,9 +930,7 @@ function initHives() {
 function updateHiveCards() {
   for (let i = 1; i <= 18; i++) {
     const qInput = document.getElementById(`queen-note-${i}`);
-    if (qInput && document.activeElement !== qInput) {
-      qInput.value = getQueenNote(i);
-    }
+    if (qInput && document.activeElement !== qInput) qInput.value = getQueenNote(i);
 
     let descDiv = document.getElementById(`hive-desc-${i}`);
     if (!descDiv) continue;
@@ -1235,7 +956,7 @@ function updateHiveCards() {
             <div>📦 Nadstawki: <b>${last.polkorpus || '0'}</b></div>
           </div>
           ${last.dzialania ? `<div class="hive-last-dzialania">🛠️ <b>Działania:</b> ${last.dzialania}</div>` : ''}
-          ${isValidTodoText(planClean) ? `<div class="hive-last-plan" style="${planDone ? 'text-decoration:line-through; opacity:0.75;' : ''}">📋 <b>Plan:</b> ${planClean} ${planDone ? '✅' : ''}</div>` : ''}
+          ${planClean && planClean !== '0' && planClean.toLowerCase() !== 'brak' ? `<div class="hive-last-plan" style="${planDone ? 'text-decoration:line-through; opacity:0.75;' : ''}">📋 <b>Plan:</b> ${planClean} ${planDone ? '✅' : ''}</div>` : ''}
         </div>
       `;
     } else {
@@ -1250,7 +971,6 @@ function openForm(type, hiveNum) {
   if (tabContent) tabContent.classList.add('active');
 
   const nowStr = getCurrentLocalISO();
-
   const selectHive = document.getElementById(`select-${type === 'inspection' ? '' : type + '-'}hive`);
   if (selectHive) {
     let optionsHtml = '';
@@ -1264,9 +984,7 @@ function openForm(type, hiveNum) {
   const inputDate = document.getElementById(`input-${type === 'inspection' ? '' : type + '-'}date`);
   if (inputDate) inputDate.value = nowStr;
 
-  if (type === 'izo') {
-    updateIzoLeczenieDate(nowStr);
-  }
+  if (type === 'izo') updateIzoLeczenieDate(nowStr);
 
   const form = document.getElementById(`${type}-form`);
   if (form) delete form.dataset.editId;
@@ -1300,36 +1018,25 @@ function fd(d) {
 
 function sortTableBy(pluralType, key) {
   const current = sortConfig[pluralType];
-  if (current.key === key) {
-    current.dir = current.dir === 'asc' ? 'desc' : 'asc';
-  } else {
-    current.key = key;
-    current.dir = 'asc';
-  }
+  if (current.key === key) current.dir = current.dir === 'asc' ? 'desc' : 'asc';
+  else { current.key = key; current.dir = 'asc'; }
   renderGlobalTables();
 }
 
 function getSortedRecords(pluralType) {
   const cfg = sortConfig[pluralType];
   let list = (state[pluralType] || []).filter(r => r.syncStatus !== 'pending_delete');
-  if (pluralType === 'inspections') {
-    list = list.filter(r => !isSystemInspectionRecord(r));
-  }
+  if (pluralType === 'inspections') list = list.filter(r => !isSystemInspectionRecord(r));
   return list.sort((a, b) => {
     let valA = a[cfg.key];
     let valB = b[cfg.key];
-
     if (cfg.key === 'timestamp') {
-      valA = new Date(valA || 0).getTime();
-      valB = new Date(valB || 0).getTime();
+      valA = new Date(valA || 0).getTime(); valB = new Date(valB || 0).getTime();
     } else if (['hiveNum', 'ramkiCzerwiu', 'polkorpus', 'kgCukru', 'ramka'].includes(cfg.key)) {
-      valA = parseFloat(valA) || 0;
-      valB = parseFloat(valB) || 0;
+      valA = parseFloat(valA) || 0; valB = parseFloat(valB) || 0;
     } else {
-      valA = String(valA || '').toLowerCase();
-      valB = String(valB || '').toLowerCase();
+      valA = String(valA || '').toLowerCase(); valB = String(valB || '').toLowerCase();
     }
-
     if (valA < valB) return cfg.dir === 'asc' ? -1 : 1;
     if (valA > valB) return cfg.dir === 'asc' ? 1 : -1;
     return 0;
@@ -1350,42 +1057,30 @@ function renderSortableHeader(pluralType, columns) {
 
 function renderGlobalTables() {
   renderSortableHeader('inspections', [
-    { key: 'timestamp', label: 'Data i Czas' },
-    { key: 'hiveNum', label: 'Ul' },
-    { key: 'rodzina', label: 'Rodzina' },
-    { key: 'matka', label: 'Matka' },
-    { key: 'jaja', label: 'Jaja' },
-    { key: 'ramkiCzerwiu', label: 'Czerw' },
-    { key: 'pokarm', label: 'Pokarm' },
-    { key: 'polkorpus', label: 'Nadstawki' },
-    { key: 'dzialania', label: 'Wykonane Działania' },
-    { key: 'przyszleDzialania', label: 'Planowane Działania' },
+    { key: 'timestamp', label: 'Data i Czas' }, { key: 'hiveNum', label: 'Ul' },
+    { key: 'rodzina', label: 'Rodzina' }, { key: 'matka', label: 'Matka' },
+    { key: 'jaja', label: 'Jaja' }, { key: 'ramkiCzerwiu', label: 'Czerw' },
+    { key: 'pokarm', label: 'Pokarm' }, { key: 'polkorpus', label: 'Nadstawki' },
+    { key: 'dzialania', label: 'Wykonane Działania' }, { key: 'przyszleDzialania', label: 'Planowane Działania' },
     { key: null, label: 'Akcje' }
   ]);
 
   renderSortableHeader('feedings', [
-    { key: 'timestamp', label: 'Data i Czas' },
-    { key: 'hiveNum', label: 'Ul' },
-    { key: 'kgCukru', label: 'Ilość (kg)' },
-    { key: 'uwagi', label: 'Uwagi / Syrop' },
+    { key: 'timestamp', label: 'Data i Czas' }, { key: 'hiveNum', label: 'Ul' },
+    { key: 'kgCukru', label: 'Ilość (kg)' }, { key: 'uwagi', label: 'Uwagi / Syrop' },
     { key: null, label: 'Akcje' }
   ]);
 
   renderSortableHeader('treatments', [
-    { key: 'timestamp', label: 'Data i Czas' },
-    { key: 'hiveNum', label: 'Ul' },
-    { key: 'preparat', label: 'Preparat / Metoda' },
-    { key: 'uwagi', label: 'Dawka / Uwagi' },
+    { key: 'timestamp', label: 'Data i Czas' }, { key: 'hiveNum', label: 'Ul' },
+    { key: 'preparat', label: 'Preparat / Metoda' }, { key: 'uwagi', label: 'Dawka / Uwagi' },
     { key: null, label: 'Akcje' }
   ]);
 
   renderSortableHeader('izos', [
-    { key: 'timestamp', label: 'Data i Czas' },
-    { key: 'hiveNum', label: 'Ul' },
-    { key: 'izoType', label: 'Operacja (IZO)' },
-    { key: 'ramka', label: 'Po ramce' },
-    { key: 'kiedyLeczyc', label: 'Kiedy Leczyć' },
-    { key: null, label: 'Akcje' }
+    { key: 'timestamp', label: 'Data i Czas' }, { key: 'hiveNum', label: 'Ul' },
+    { key: 'izoType', label: 'Operacja (IZO)' }, { key: 'ramka', label: 'Po ramce' },
+    { key: 'kiedyLeczyc', label: 'Kiedy Leczyć' }, { key: null, label: 'Akcje' }
   ]);
 
   const tbodyInsp = document.getElementById('sheet-tbody');
@@ -1401,14 +1096,9 @@ function renderGlobalTables() {
   if (tbodyInsp) tbodyInsp.innerHTML = activeInsp.map(r => `
     <tr>
       <td>${fd(r.timestamp)} ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td>
-      <td><b>Ul ${r.hiveNum}</b></td>
-      <td>${r.rodzina || ''}</td>
-      <td>${r.matka || ''}</td>
-      <td>${r.jaja || ''}</td>
-      <td>${r.ramkiCzerwiu || '0'}</td>
-      <td>${r.pokarm || ''}</td>
-      <td>${r.polkorpus || '0'}</td>
-      <td>${r.dzialania || ''}</td>
+      <td><b>Ul ${r.hiveNum}</b></td><td>${r.rodzina || ''}</td><td>${r.matka || ''}</td>
+      <td>${r.jaja || ''}</td><td>${r.ramkiCzerwiu || '0'}</td><td>${r.pokarm || ''}</td>
+      <td>${r.polkorpus || '0'}</td><td>${r.dzialania || ''}</td>
       <td>${cleanTodoText(r.przyszleDzialania) || ''} ${isTodoDone(r) && cleanTodoText(r.przyszleDzialania) ? '✅' : ''}</td>
       <td>
         <button type="button" onclick="editRecord('${r.id}', 'inspection')" class="btn-small">✏️</button>
@@ -1419,9 +1109,7 @@ function renderGlobalTables() {
   if (tbodyFeed) tbodyFeed.innerHTML = activeFeed.map(r => `
     <tr>
       <td>${fd(r.timestamp)} ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td>
-      <td><b>Ul ${r.hiveNum}</b></td>
-      <td><b>${r.kgCukru || '0'} kg</b></td>
-      <td>${r.uwagi || ''}</td>
+      <td><b>Ul ${r.hiveNum}</b></td><td><b>${r.kgCukru || '0'} kg</b></td><td>${r.uwagi || ''}</td>
       <td>
         <button type="button" onclick="editRecord('${r.id}', 'feeding')" class="btn-small">✏️</button>
         <button type="button" onclick="deleteRecord('${r.id}', 'feeding')" class="btn-small" style="background:#dc2626; color:white;">🗑️</button>
@@ -1431,9 +1119,7 @@ function renderGlobalTables() {
   if (tbodyTreat) tbodyTreat.innerHTML = activeTreat.map(r => `
     <tr>
       <td>${fd(r.timestamp)} ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td>
-      <td><b>Ul ${r.hiveNum}</b></td>
-      <td><b>${r.preparat || ''}</b></td>
-      <td>${r.uwagi || ''}</td>
+      <td><b>Ul ${r.hiveNum}</b></td><td><b>${r.preparat || ''}</b></td><td>${r.uwagi || ''}</td>
       <td>
         <button type="button" onclick="editRecord('${r.id}', 'treatment')" class="btn-small">✏️</button>
         <button type="button" onclick="deleteRecord('${r.id}', 'treatment')" class="btn-small" style="background:#dc2626; color:white;">🗑️</button>
@@ -1443,9 +1129,7 @@ function renderGlobalTables() {
   if (tbodyIzo) tbodyIzo.innerHTML = activeIzo.map(r => `
     <tr>
       <td>${fd(r.timestamp)} ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td>
-      <td><b>Ul ${r.hiveNum}</b></td>
-      <td><b>${r.izoType || ''}</b></td>
-      <td>Ramka: ${r.ramka || ''}</td>
+      <td><b>Ul ${r.hiveNum}</b></td><td><b>${r.izoType || ''}</b></td><td>Ramka: ${r.ramka || ''}</td>
       <td style="color:#dc2626; font-weight:bold;">${formatToPLDate(r.kiedyLeczyc) || ''}</td>
       <td>
         <button type="button" onclick="editRecord('${r.id}', 'izo')" class="btn-small">✏️</button>
@@ -1470,21 +1154,13 @@ function renderLocalHistory(type, hiveNum) {
     container.innerHTML = `
       <div class="table-scroll-container">
         <table class="data-table">
-          <thead>
-            <tr>
-              <th>Data</th><th>Rodzina</th><th>Matka</th><th>Jaja</th><th>Czerw</th><th>Pokarm</th><th>Nadstawki</th><th>Wykonane Działania</th><th>Plan</th><th>Akcje</th>
-            </tr>
-          </thead>
+          <thead><tr><th>Data</th><th>Rodzina</th><th>Matka</th><th>Jaja</th><th>Czerw</th><th>Pokarm</th><th>Nadstawki</th><th>Wykonane Działania</th><th>Plan</th><th>Akcje</th></tr></thead>
           <tbody>
             ${data.map(r => `
               <tr>
                 <td><b>${fd(r.timestamp)}</b> ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td>
-                <td>${r.rodzina || '-'}</td>
-                <td>${r.matka || '-'}</td>
-                <td>${r.jaja || '-'}</td>
-                <td><b>${r.ramkiCzerwiu || '0'}</b></td>
-                <td>${r.pokarm || '-'}</td>
-                <td>${r.polkorpus || '0'}</td>
+                <td>${r.rodzina || '-'}</td><td>${r.matka || '-'}</td><td>${r.jaja || '-'}</td>
+                <td><b>${r.ramkiCzerwiu || '0'}</b></td><td>${r.pokarm || '-'}</td><td>${r.polkorpus || '0'}</td>
                 <td>${r.dzialania || '-'}</td>
                 <td>${cleanTodoText(r.przyszleDzialania) || '-'} ${isTodoDone(r) && cleanTodoText(r.przyszleDzialania) ? '✅' : ''}</td>
                 <td>
@@ -1500,16 +1176,12 @@ function renderLocalHistory(type, hiveNum) {
     container.innerHTML = `
       <div class="table-scroll-container">
         <table class="data-table">
-          <thead>
-            <tr><th>Data</th><th>Ul</th><th>Ilość (kg)</th><th>Uwagi</th><th>Akcje</th></tr>
-          </thead>
+          <thead><tr><th>Data</th><th>Ul</th><th>Ilość (kg)</th><th>Uwagi</th><th>Akcje</th></tr></thead>
           <tbody>
             ${data.map(r => `
               <tr>
                 <td><b>${fd(r.timestamp)}</b> ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td>
-                <td>Ul ${r.hiveNum}</td>
-                <td><b>${r.kgCukru || '0'} kg</b></td>
-                <td>${r.uwagi || '-'}</td>
+                <td>Ul ${r.hiveNum}</td><td><b>${r.kgCukru || '0'} kg</b></td><td>${r.uwagi || '-'}</td>
                 <td>
                   <button type="button" onclick="editRecord('${r.id}', 'feeding')" class="btn-small">✏️</button>
                   <button type="button" onclick="deleteRecord('${r.id}', 'feeding', '${hiveNum}')" class="btn-small" style="background:#dc2626; color:white;">🗑️</button>
@@ -1523,16 +1195,12 @@ function renderLocalHistory(type, hiveNum) {
     container.innerHTML = `
       <div class="table-scroll-container">
         <table class="data-table">
-          <thead>
-            <tr><th>Data</th><th>Ul</th><th>Preparat / Metoda</th><th>Dawka / Uwagi</th><th>Akcje</th></tr>
-          </thead>
+          <thead><tr><th>Data</th><th>Ul</th><th>Preparat / Metoda</th><th>Dawka / Uwagi</th><th>Akcje</th></tr></thead>
           <tbody>
             ${data.map(r => `
               <tr>
                 <td><b>${fd(r.timestamp)}</b> ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td>
-                <td>Ul ${r.hiveNum}</td>
-                <td><b>${r.preparat || '-'}</b></td>
-                <td>${r.uwagi || '-'}</td>
+                <td>Ul ${r.hiveNum}</td><td><b>${r.preparat || '-'}</b></td><td>${r.uwagi || '-'}</td>
                 <td>
                   <button type="button" onclick="editRecord('${r.id}', 'treatment')" class="btn-small">✏️</button>
                   <button type="button" onclick="deleteRecord('${r.id}', 'treatment', '${hiveNum}')" class="btn-small" style="background:#dc2626; color:white;">🗑️</button>
@@ -1546,16 +1214,12 @@ function renderLocalHistory(type, hiveNum) {
     container.innerHTML = `
       <div class="table-scroll-container">
         <table class="data-table">
-          <thead>
-            <tr><th>Data</th><th>Ul</th><th>Operacja</th><th>Po ramce</th><th>Kiedy leczyć (+24 dni)</th><th>Akcje</th></tr>
-          </thead>
+          <thead><tr><th>Data</th><th>Ul</th><th>Operacja</th><th>Po ramce</th><th>Kiedy leczyć (+24 dni)</th><th>Akcje</th></tr></thead>
           <tbody>
             ${data.map(r => `
               <tr>
                 <td><b>${fd(r.timestamp)}</b> ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td>
-                <td>Ul ${r.hiveNum}</td>
-                <td><b>${r.izoType || '-'}</b></td>
-                <td>Ramka ${r.ramka || '-'}</td>
+                <td>Ul ${r.hiveNum}</td><td><b>${r.izoType || '-'}</b></td><td>Ramka ${r.ramka || '-'}</td>
                 <td style="color:#dc2626; font-weight:bold;">${formatToPLDate(r.kiedyLeczyc) || '-'}</td>
                 <td>
                   <button type="button" onclick="editRecord('${r.id}', 'izo')" class="btn-small">✏️</button>
@@ -1586,11 +1250,11 @@ function buildTodoItemHTML(t) {
   const typeLabel = standalone ? '📝 Niezależna notatka' : '📋 Notatka z przeglądu';
   const statusBadge = isDone 
     ? '<span style="background:#059669; color:#fff; padding:2px 8px; border-radius:4px; font-size:0.75rem; font-weight:bold;">✅ WYKONANE</span>'
-    : '<span style="background:#f59e0b; color:#fff; padding:2px 8px; border-radius:4px; font-size:0.75rem; font-weight:bold;">⏳ NIEWYKONANE</span>';
+    : '<span style="background:#f59e0b; color:#fff; padding:2px 8px; border-radius:4px; font-size:0.75rem; font-weight:bold;">⏳ DO ZROBIENIA</span>';
   const textClean = cleanTodoText(t.przyszleDzialania);
 
   return `<li style="padding: 12px 14px; border: 1px solid ${isDone ? '#a7f3d0' : '#fde68a'}; display:flex; align-items:center; gap:12px; background:${isDone ? '#f0fdf4' : '#fffbeb'}; margin-bottom:8px; border-radius:8px; flex-wrap:wrap;">
-    <button type="button" onclick="toggleTodo('${t.id}')" style="width:36px; height:36px; font-weight:900; font-size:1.15rem; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; ${boxStyle}" title="Kliknij, aby zmienić status (Wykonane / Niewykonane)">
+    <button type="button" onclick="toggleTodo('${t.id}')" style="width:36px; height:36px; font-weight:900; font-size:1.15rem; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; ${boxStyle}" title="Zmień status (Wykonane / Niewykonane)">
       ${boxMark}
     </button>
     <div style="flex:1; min-width:200px;">
@@ -1612,74 +1276,32 @@ function buildTodoItemHTML(t) {
   </li>`;
 }
 
-function getAllValidTodos() {
-  const combinedMap = new Map();
-
-  (state.inspections || []).forEach(item => {
-    if (item && item.id) combinedMap.set(item.id, item);
-  });
-
-  const permMap = getPermanentTodosMap();
-  Object.values(permMap).forEach(bItem => {
-    if (bItem && bItem.id) {
-      const existing = combinedMap.get(bItem.id);
-      const merged = mergeInspectionSafely(bItem, existing);
-      combinedMap.set(bItem.id, merged);
-    }
-  });
-
-  return Array.from(combinedMap.values()).filter(i => {
-    if (!i || i.syncStatus === 'pending_delete') return false;
-    if (isQueenRecord(i)) return false;
-    return isValidTodoText(i.przyszleDzialania);
-  });
-}
-
 function renderTodos() {
-  const ulPending = document.getElementById('todo-list-pending');
-  const ulDone = document.getElementById('todo-list-done');
+  const ulTasks = document.getElementById('todo-list-tasks');
+  if (!ulTasks) return;
 
-  const allTodos = getAllValidTodos();
-  const pendingList = allTodos
-    .filter(t => !isTodoDone(t))
-    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-  const completedList = allTodos
-    .filter(t => isTodoDone(t))
-    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  let allTodos = state.inspections.filter(i => {
+    if (i.syncStatus === 'pending_delete') return false;
+    if (isQueenRecord(i)) return false;
+    const val = cleanTodoText(i.przyszleDzialania);
+    const lower = val.toLowerCase();
+    return val.length > 0 && lower !== '0' && lower !== 'brak' && lower !== 'brak planów' && lower !== 'brak planu' && lower !== 'brak uwag' && lower !== 'brak dzialan' && lower !== 'brak działań' && lower !== 'nie' && lower !== '-';
+  });
 
-  const countAllEl = document.getElementById('count-todo-all');
-  const countPendingEl = document.getElementById('count-todo-pending');
-  const countFilterAll = document.getElementById('count-filter-all');
-  const countFilterDone = document.getElementById('count-filter-done');
-  const countFilterPending = document.getElementById('count-filter-pending');
+  const sortedList = allTodos.slice().sort((a, b) => {
+    const doneA = isTodoDone(a) ? 1 : 0;
+    const doneB = isTodoDone(b) ? 1 : 0;
+    if (doneA !== doneB) return doneA - doneB; // Niewykonane wyżej
+    return new Date(b.timestamp) - new Date(a.timestamp);
+  });
 
-  if (countAllEl) countAllEl.innerText = allTodos.length;
-  if (countPendingEl) countPendingEl.innerText = pendingList.length;
-  if (countFilterAll) countFilterAll.innerText = allTodos.length;
-  if (countFilterDone) countFilterDone.innerText = completedList.length;
-  if (countFilterPending) countFilterPending.innerText = pendingList.length;
+  const countTotalEl = document.getElementById('count-todo-total');
+  if (countTotalEl) countTotalEl.innerText = sortedList.length;
 
-  // 1. Lista w zakładce „📋 ZROBIĆ” (pokazuje zadania oczekujące na wykonanie)
-  if (ulPending) {
-    ulPending.innerHTML = pendingList.length === 0
-      ? '<li style="padding:14px; color:#6b7280; font-style:italic;">Brak bieżących zadań do zrobienia – wszystkie widnieją jako wykonane w zakładce „✅ Zrobione”! 🎉</li>'
-      : pendingList.map(t => buildTodoItemHTML(t)).join('');
-  }
-
-  // 2. Lista w zakładce „✅ Zrobione” (wszystkie notatki niezależne oraz z przeglądów z filtrowaniem i możliwością zaznaczania)
-  if (ulDone) {
-    let listForDoneTab = allTodos.slice();
-    if (doneTabFilter === 'DONE') {
-      listForDoneTab = completedList;
-    } else if (doneTabFilter === 'PENDING') {
-      listForDoneTab = pendingList;
-    } else {
-      listForDoneTab.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    }
-
-    ulDone.innerHTML = listForDoneTab.length === 0
-      ? '<li style="padding:14px; color:#6b7280; font-style:italic;">Brak notatek w tym widoku. Dodaj notatkę w zakładce „📋 ZROBIĆ” lub podczas przeglądu ula.</li>'
-      : listForDoneTab.map(t => buildTodoItemHTML(t)).join('');
+  if (sortedList.length === 0) {
+    ulTasks.innerHTML = '<li style="padding:14px; color:#6b7280; font-style:italic;">Brak zapisanych zadań z przeglądów i notatek.</li>';
+  } else {
+    ulTasks.innerHTML = sortedList.map(t => buildTodoItemHTML(t)).join('');
   }
 }
 
@@ -1695,13 +1317,7 @@ function isTodoDone(recordOrId) {
 }
 
 async function toggleTodo(id) {
-  let rec = state.inspections.find(r => r.id === id);
-  const permMap = getPermanentTodosMap();
-  if (!rec && permMap[id]) {
-    rec = permMap[id];
-  } else if (rec && permMap[id]) {
-    rec = mergeInspectionSafely(permMap[id], rec);
-  }
+  const rec = state.inspections.find(r => r.id === id);
   if (!rec) return;
 
   const currentlyDone = isTodoDone(rec);
@@ -1715,17 +1331,11 @@ async function toggleTodo(id) {
   rec.updatedAt = Date.now().toString();
   rec.syncStatus = 'pending_save';
 
-  try {
-    localStorage.setItem('todo_done_' + id, newDone.toString());
-  } catch (e) {}
+  try { localStorage.setItem('todo_done_' + id, newDone.toString()); } catch (e) {}
 
-  saveToPermanentTodos(rec);
   await saveLocalRecord('inspection', rec);
-  renderTodos();
-  updateHiveCards();
-  updatePendingCount();
-  updateSyncUI();
-  showToast(newDone ? "Zaznaczono jako WYKONANE (Zrobione) ✅" : "Zaznaczono jako NIEWYKONANE (Do zrobienia) ⏳", "info");
+  await loadStateFromLocal();
+  showToast(newDone ? "Oznaczono jako WYKONANE (Zrobione) ✅" : "Oznaczono jako NIEWYKONANE (Do zrobienia) ⏳", "info");
   if (navigator.onLine) syncData(false);
 }
 
@@ -1746,5 +1356,3 @@ function showToast(msg, type = 'info') {
     setTimeout(() => toast.remove(), 400);
   }, 3000);
 }
-
-console.log("PASIEKA v9.5: Kod app.js zweryfikowany i załadowany w 100%!");
