@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PASIEKA v9.5 - Asystent Pasieki</title>
+  <title>PASIEKA v9.6 - Asystent Pasieki</title>
 
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐝</text></svg>">
   <meta name="theme-color" content="#d97706">
@@ -13,7 +13,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
-  <link rel="stylesheet" href="styles.css?v=9.5">
+  <link rel="stylesheet" href="styles.css?v=9.6">
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
@@ -22,7 +22,7 @@
     <div class="logo-area">
       <span class="bee-icon">🐝</span>
       <div>
-        <h1>PASIEKA <span style="font-size:0.75rem; background:#059669; color:#fff; padding:2px 8px; border-radius:6px; vertical-align:middle;">v9.5</span></h1>
+        <h1>PASIEKA <span style="font-size:0.75rem; background:#059669; color:#fff; padding:2px 8px; border-radius:6px; vertical-align:middle;">v9.6</span></h1>
         <p class="subtitle">Ewidencja 18 uli • 3 Pasieki</p>
       </div>
     </div>
@@ -36,8 +36,7 @@
     <button class="tab-btn active" data-tab="tab-dom">🏡 DOM (1-6)</button>
     <button class="tab-btn" data-tab="tab-zbior">🌾 ZBIÓR (7-12)</button>
     <button class="tab-btn" data-tab="tab-las">🌲 LAS (13-18)</button>
-    <button class="tab-btn" data-tab="tab-todo" style="background:#059669; color:#fff; font-weight:bold;">📋 ZROBIĆ</button>
-    <button class="tab-btn" data-tab="tab-done" style="background:#047857; color:#fff; font-weight:bold;">✅ Zrobione</button>
+    <button class="tab-btn" data-tab="tab-todo" style="background:#059669; color:#fff; font-weight:bold;">📋 ZADANIA</button>
     <button class="tab-btn" data-tab="tab-sheet">📊 Arkusz / Ustawienia</button>
   </nav>
 
@@ -56,17 +55,17 @@
     <div id="hives-grid-las" class="hives-grid hives-grid-las"></div>
   </section>
   
-  <!-- ZAKŁADKA 1: ZROBIĆ (FORMULARZ NIEZALEŻNYCH NOTATEK + LISTA DO ZROBIENIA) -->
+  <!-- ZAKŁADKA ZADANIA -->
   <section id="tab-todo" class="tab-content">
     <div class="card form-card" style="margin-bottom: 16px; border: 2px solid #059669;">
       <div class="card-header" style="background: #059669; color: #ffffff; display:flex; justify-content:space-between; align-items:center;">
-        <h2 id="todo-form-title" style="margin:0; font-size:1.1rem;">➕ Dodaj Niezależną Notatkę z Datą</h2>
+        <h2 id="todo-form-title" style="margin:0; font-size:1.1rem;">➕ Dodaj Notatkę / Zadanie</h2>
         <button type="button" id="btn-cancel-todo-edit" class="btn-small hidden" onclick="resetTodoForm()" style="background:#ffffff; color:#065f46; font-weight:bold;">✖ Anuluj edycję</button>
       </div>
 
       <form id="todo-form" style="padding-top:10px;">
         <div class="form-group">
-          <label class="group-label" style="font-weight:bold; color:#065f46; margin-bottom:6px; display:block;">Zaznacz, czego dotyczy notatka:</label>
+          <label class="group-label" style="font-weight:bold; color:#065f46; margin-bottom:6px; display:block;">Czego dotyczy notatka?</label>
           <div class="radio-group" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
             <label style="flex:1; min-width:180px; background:#ecfdf5; border:2px solid #059669; padding:8px 12px; border-radius:8px; font-weight:bold; cursor:pointer; display:flex; align-items:center; gap:6px;">
               <input type="radio" name="todoScopeType" value="PASIEKA" checked onchange="toggleTodoScopeSelect()"> 🐝 Całej pasieki
@@ -89,7 +88,7 @@
           </div>
 
           <div id="todo-scope-hive-box" class="form-group flex-1 hidden" style="min-width:200px;">
-            <label for="select-todo-hive">Wybierz konkretny ul:</label>
+            <label for="select-todo-hive">Wybierz numer ula:</label>
             <select id="select-todo-hive" class="input-control select-lg">
               <option value="1">Ul 1 (DOM)</option>
               <option value="2">Ul 2 (DOM)</option>
@@ -124,51 +123,31 @@
         </div>
 
         <div class="form-group margin-top-md">
-          <label class="group-label">Status początkowy:</label>
+          <label class="group-label">Status początkowy notatki:</label>
           <div class="radio-group" style="display:flex; gap:10px; flex-wrap:wrap;">
-            <label style="cursor:pointer;"><input type="radio" name="todoInitStatus" value="TODO" checked> ⏳ Niewykonane (Do zrobienia)</label>
-            <label style="cursor:pointer;"><input type="radio" name="todoInitStatus" value="DONE"> ✅ Wykonane (Zrobione)</label>
+            <label style="cursor:pointer;"><input type="radio" name="todoInitStatus" value="TODO" checked> ⏳ Do zrobienia (Niewykonane)</label>
+            <label style="cursor:pointer;"><input type="radio" name="todoInitStatus" value="DONE"> ✅ Od razu jako Wykonane (Zrobione)</label>
           </div>
         </div>
 
         <div class="form-actions margin-top-md">
           <button type="submit" id="btn-submit-todo" class="btn-primary" style="background:#059669; border-color:#047857; font-size:1.05rem; width:100%; padding:12px;">
-            💾 ZAPISZ NOTATKĘ (TRAFIA DO „ZROBIĆ” I „ZROBIONE”)
+            💾 ZAPISZ NOTATKĘ I SYNCHRONIZUJ
           </button>
         </div>
       </form>
     </div>
 
-    <div class="card" style="border: 2px solid #f59e0b;">
-      <div class="card-header" style="background: #fef3c7; color: #92400e; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-        <h2 style="margin:0;">⏳ Zadania Do Zrobienia (<span id="count-todo-pending">0</span>)</h2>
-        <button type="button" onclick="openDoneTab()" class="btn-small" style="background:#059669; color:white; font-weight:bold;">Przejdź do zakładki „✅ Zrobione” →</button>
+    <!-- KARTA: ZADANIA -->
+    <div id="card-todo-tasks" class="card" style="border: 2px solid #059669;">
+      <div class="card-header" style="background: #d1fae5; color: #065f46; display:flex; justify-content:space-between; align-items:center;">
+        <h2 style="margin:0;">📋 ZADANIA</h2>
+        <span style="background:#065f46; color:white; padding:4px 10px; border-radius:12px; font-size:0.9rem; font-weight:bold;"><span id="count-todo-total">0</span></span>
       </div>
       <p style="padding: 10px 14px 0; color: #4b5563; font-size: 0.9rem; margin: 0;">
-        Poniżej znajdują się zadania oczekujące na wykonanie (z formularza oraz z przeglądów). Kliknij kwadracik lub przycisk <b>✓ Wykonane</b>, aby oznaczyć je jako zrobione.
+        Wszystkie notatki i zadania z przeglądów. Zaznaczaj je jako <b>Wykonane [✓]</b> lub <b>Niewykonane [ ]</b>.
       </p>
-      <ul id="todo-list-pending" style="list-style: none; padding: 12px; margin: 0;"></ul>
-    </div>
-  </section>
-
-  <!-- ZAKŁADKA 2: „ZROBIONE” (REJESTR WSZYSTKICH NOTATEK NIEZALEŻNYCH I ZADAŃ Z PRZEGLĄDÓW) -->
-  <section id="tab-done" class="tab-content">
-    <div class="card" style="border: 2px solid #059669;">
-      <div class="card-header" style="background: #d1fae5; color: #065f46; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-        <h2 style="margin:0;">✅ Zakładka „Zrobione” – Notatki Niezależne i z Przeglądów (<span id="count-todo-all">0</span>)</h2>
-        <button type="button" onclick="openTodoTab()" class="btn-small" style="background:#d97706; color:white; font-weight:bold;">➕ Dodaj nową notatkę</button>
-      </div>
-      <p style="padding: 10px 14px 0; color: #4b5563; font-size: 0.9rem; margin: 0;">
-        Tutaj zapisywane są wszystkie notatki niezależne oraz zadania z przeglądów uli. Możesz w każdej chwili zaznaczyć dowolną pozycję jako <b>Wykonaną [✓]</b> lub <b>Niewykonaną [ ]</b>.
-      </p>
-
-      <div style="display:flex; gap:8px; padding:12px 14px 0; flex-wrap:wrap;">
-        <button type="button" id="filter-done-all" onclick="setDoneTabFilter('ALL')" class="btn-small" style="background:#059669; color:white; font-weight:bold;">📋 Wszystkie (<span id="count-filter-all">0</span>)</button>
-        <button type="button" id="filter-done-only" onclick="setDoneTabFilter('DONE')" class="btn-small" style="background:#e5e7eb; color:#1f2937; font-weight:bold;">✅ Tylko Wykonane (<span id="count-filter-done">0</span>)</button>
-        <button type="button" id="filter-done-pending" onclick="setDoneTabFilter('PENDING')" class="btn-small" style="background:#e5e7eb; color:#1f2937; font-weight:bold;">⏳ Tylko Niewykonane (<span id="count-filter-pending">0</span>)</button>
-      </div>
-
-      <ul id="todo-list-done" style="list-style: none; padding: 12px; margin: 0;"></ul>
+      <ul id="todo-list-tasks" style="list-style: none; padding: 12px; margin: 0;"></ul>
     </div>
   </section>
 
@@ -249,7 +228,7 @@
         </div>
 
         <div class="form-group margin-top-md">
-          <label for="input-przyszle-dzialania">Przyszłe Działania / Plan (Trafia do ZROBIĆ i Zrobione):</label>
+          <label for="input-przyszle-dzialania">Przyszłe Działania / Plan (Trafia do ZADANIA):</label>
           <textarea id="input-przyszle-dzialania" class="input-control" rows="2" placeholder="np. Podać syrop za 3 dni"></textarea>
         </div>
 
@@ -394,7 +373,7 @@
   <section id="tab-sheet" class="tab-content">
     <div class="card sheet-card">
       <div class="sheet-toolbar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
-        <div><h2>Arkusz Kalkulacyjny i Synchronizacja (v9.5)</h2></div>
+        <div><h2>Arkusz Kalkulacyjny i Synchronizacja (v9.6)</h2></div>
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
           <button id="btn-sync-now" class="btn-primary" style="padding:10px 20px;">🔄 Synchronizuj Teraz</button>
           <button type="button" onclick="forceHardResetCache()" class="btn-small" style="background:#dc2626; color:white; border:none; padding:10px 14px; font-weight:bold;">⚠️ Reset Pamięci Cache (Napraw)</button>
@@ -464,9 +443,10 @@
     </div>
   </section>
 
+  <!-- AUTOMATYCZNE CZYSZCZENIE STAREGO SERVICE WORKERA DO WERSJI v9.6 -->
   <script>
-    (async function enforceV95() {
-      const VER = 'v9.5';
+    (async function enforceV96() {
+      const VER = 'v9.6';
       try {
         if (localStorage.getItem('pasieka_sw_version') !== VER) {
           if ('serviceWorker' in navigator) {
@@ -480,13 +460,13 @@
           localStorage.setItem('pasieka_sw_version', VER);
         }
         if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.register('./sw.js?v=9.5');
+          navigator.serviceWorker.register('./sw.js?v=9.6');
         }
       } catch (err) {
         console.warn('SW init info:', err);
       }
     })();
   </script>
-  <script src="app.js?v=9.5"></script>
+  <script src="app.js?v=9.6"></script>
 </body>
 </html>
