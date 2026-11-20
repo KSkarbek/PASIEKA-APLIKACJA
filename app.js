@@ -1,7 +1,10 @@
-// PASIEKA v9.6 - BEZ INDEXEDDB, 100% BEZPIECZNA SYNCHRONIZACJA, ZAKŁADKA ZADANIA
-const DEFAULT_WEBHOOK = 'https://script.google.com/macros/s/AKfycbzIVjgjm-estpeBZLGYakeSmzBEZnRSOXQ5CS_QVHSpwC2MChdmoyOP4dHYm9lsaBrBkA/exec'; 
+// PASIEKA v10.0 - WERSJA OSTATECZNA (BEZ INDEXEDDB, ZAKŁADKA ZADANIA, PEŁNA SYNCHRONIZACJA)
+
+const DEFAULT_WEBHOOK = 'https://script.google.com/macros/s/AKfycbzPnyxsCd1qtle4cQWaH7b4xVmm7fTic2Cd0A2N4hdMQxlKKDbICO51-rblndVwrFEvGQ/exec';
 
 let lastActiveHiveTab = 'tab-dom';
+let currentTodoFilter = 'ALL'; // 'ALL' | 'PENDING' | 'DONE'
+let pendingSyncRetry = false;
 
 let state = {
   inspections: [],
@@ -9,8 +12,7 @@ let state = {
   treatments: [],
   izos: [],
   syncPendingCount: 0,
-  isSyncing: false,
-  pendingSyncRetry: false
+  isSyncing: false
 };
 
 let sortConfig = {
@@ -26,7 +28,9 @@ function getWebhookUrl() {
   try {
     const custom = localStorage.getItem('gsheet_webhook');
     return (custom && custom.trim() !== '') ? custom.trim() : DEFAULT_WEBHOOK;
-  } catch (e) { return DEFAULT_WEBHOOK; }
+  } catch (e) {
+    return DEFAULT_WEBHOOK;
+  }
 }
 
 function getCurrentLocalISO() {
@@ -45,13 +49,14 @@ async function forceHardResetCache() {
       const keys = await caches.keys();
       for (let k of keys) await caches.delete(k);
     }
-    showToast("Pamięć cache wyczyszczona! Przeładowuję aplikację...", "success");
-    setTimeout(() => window.location.reload(true), 800);
+    showToast("Pamięć cache wyczyszczona! Przeładowuję...", "success");
+    setTimeout(() => window.location.reload(true), 700);
   } catch (e) {
     window.location.reload(true);
   }
 }
 
+// ROZPOZNAWANIE REKORDÓW SPECJALNYCH
 function isStandaloneNote(rec) {
   if (!rec) return false;
   return String(rec.rodzina) === 'NOTATKA_ZROBIC' || String(rec.id).startsWith('todo_');
@@ -73,9 +78,9 @@ function getTodoTargetLabel(rec) {
   }
   const scope = String(rec.matka || '').trim().toUpperCase();
   if (scope === 'CAŁA PASIEKA' || String(rec.hiveNum) === '99') return '🐝 Cała Pasieka (1-18)';
-  if (scope === 'PASIEKA DOM' || String(rec.hiveNum) === '91') return '🏡 Cała Pasieka DOM (1-6)';
-  if (scope === 'PASIEKA ZBIÓR' || String(rec.hiveNum) === '92') return '🌾 Cała Pasieka ZBIÓR (7-12)';
-  if (scope === 'PASIEKA LAS' || String(rec.hiveNum) === '93') return '🌲 Cała Pasieka LAS (13-18)';
+  if (scope === 'PASIEKA DOM' || String(rec.hiveNum) === '91') return '🏡 Pasieka DOM (1-6)';
+  if (scope === 'PASIEKA ZBIÓR' || String(rec.hiveNum) === '92') return '🌾 Pasieka ZBIÓR (7-12)';
+  if (scope === 'PASIEKA LAS' || String(rec.hiveNum) === '93') return '🌲 Pasieka LAS (13-18)';
   if (scope.startsWith('UL ')) return `🏠 ${scope}`;
   return `🏠 Ul ${rec.hiveNum}`;
 }
@@ -92,7 +97,9 @@ function isDateString(val) {
     const num = Number(s);
     if (num >= 1 && num <= 100) return false;
   }
-  if (/\d{4}[-/.]\d{1,2}/.test(s) || /\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/.test(s) || s.includes('T') || s.includes('GMT')) return true;
+  if (/\d{4}[-/.]\d{1,2}/.test(s) || /\d{1,2}[./-]\d{1,2}[./-]\d{2,4}/.test(s) || s.includes('T') || s.includes('GMT')) {
+    return true;
+  }
   const d = new Date(s);
   return !isNaN(d.getTime());
 }
@@ -100,7 +107,7 @@ function isDateString(val) {
 function isHiveNum(val) {
   if (val === null || val === undefined || val === '') return false;
   const s = String(val).trim();
-  const n = parseInt(s);
+  const n = parseInt(s, 10);
   return !isNaN(n) && n >= 1 && n <= 100 && !s.includes('-') && !s.includes(':') && !s.includes('T') && !s.includes('GMT') && !s.includes('.');
 }
 
@@ -147,28 +154,27 @@ function normalizeRecord(type, row) {
   let timestampStr = null;
 
   if (isDateString(rawHive) && isHiveNum(rawTime)) {
-    hiveNum = parseInt(rawTime);
+    hiveNum = parseInt(rawTime, 10);
     timestampStr = rawHive;
   } else if (isHiveNum(rawHive) && isDateString(rawTime)) {
-    hiveNum = parseInt(rawHive);
+    hiveNum = parseInt(rawHive, 10);
     timestampStr = rawTime;
   } else if (isHiveNum(rawHive)) {
-    hiveNum = parseInt(rawHive);
+    hiveNum = parseInt(rawHive, 10);
     timestampStr = rawTime;
   } else if (isHiveNum(rawTime)) {
-    hiveNum = parseInt(rawTime);
+    hiveNum = parseInt(rawTime, 10);
     timestampStr = rawHive;
-  } else {
-    let matchH = String(rawHive).match(/^\d+$/);
-    let matchT = String(rawTime).match(/^\d+$/);
-    if (matchH && parseInt(matchH[0]) <= 100) { hiveNum = parseInt(matchH[0]); timestampStr = rawTime; }
-    else if (matchT && parseInt(matchT[0]) <= 100) { hiveNum = parseInt(matchT[0]); timestampStr = rawHive; }
   }
 
   if (!hiveNum || isNaN(hiveNum) || hiveNum < 1 || hiveNum > 100) {
-    if (id.startsWith('queen_hive_')) hiveNum = parseInt(id.replace('queen_hive_', '')) || 1;
-    else if (id.startsWith('todo_') || String(row.rodzina) === 'NOTATKA_ZROBIC') hiveNum = 1;
-    else return null;
+    if (id.startsWith('queen_hive_')) {
+      hiveNum = parseInt(id.replace('queen_hive_', ''), 10) || 1;
+    } else if (id.startsWith('todo_') || String(row.rodzina) === 'NOTATKA_ZROBIC') {
+      hiveNum = 1;
+    } else {
+      return null;
+    }
   }
 
   let d = new Date(timestampStr);
@@ -192,73 +198,69 @@ function normalizeRecord(type, row) {
     normalized.dzialania = row.dzialania !== undefined ? String(row.dzialania) : '';
     normalized.przyszleDzialania = row.przyszleDzialania !== undefined ? String(row.przyszleDzialania) : '';
   } else if (type === 'feeding') {
-    let kg = row.kgCukru;
-    let uw = row.uwagi;
-    if (isNaN(parseFloat(kg)) && !isNaN(parseFloat(uw))) { kg = uw; uw = row.updatedAt || ''; }
-    normalized.kgCukru = String(kg || '0');
-    normalized.uwagi = String(uw || '');
+    normalized.kgCukru = String(row.kgCukru || '0');
+    normalized.uwagi = String(row.uwagi || '');
   } else if (type === 'treatment') {
-    normalized.preparat = row.preparat || '';
-    normalized.uwagi = row.uwagi || '';
+    normalized.preparat = String(row.preparat || '');
+    normalized.uwagi = String(row.uwagi || '');
   } else if (type === 'izo') {
-    let izoTypeVal = row.izoType || row.ramka || 'IZO-pocz';
-    if (String(izoTypeVal).includes('Ul')) izoTypeVal = row.ramka || 'IZO-pocz';
-    let rNum = row.ramka;
-    if (isNaN(parseInt(rNum)) && !isNaN(parseInt(row.kiedyLeczyc))) rNum = row.kiedyLeczyc;
-    normalized.izoType = String(izoTypeVal);
-    normalized.ramka = String(rNum || '1');
+    normalized.izoType = String(row.izoType || 'IZO-pocz');
+    normalized.ramka = String(row.ramka || '1');
     normalized.kiedyLeczyc = formatToPLDate(row.kiedyLeczyc);
   }
   return normalized;
 }
 
-// BAZA DANYCH v9.6 - WYŁĄCZNIE LOCALSTORAGE (Zero IndexedDB)
+// ==========================================
+// SYNCHRONICZNA PAMIĘĆ LOCALSTORAGE (BEZ INDEXEDDB)
+// ==========================================
 function getLocalRecords(type) {
   const storeName = type + 's';
-  try { return JSON.parse(localStorage.getItem('pasieka_' + storeName) || '[]'); } 
-  catch (e) { return []; }
-}
-
-async function saveLocalRecord(type, record) {
-  const storeName = type + 's';
   try {
-    let items = getLocalRecords(type);
-    const idx = items.findIndex(i => i.id === record.id);
-    if (idx >= 0) items[idx] = record; else items.push(record);
-    localStorage.setItem('pasieka_' + storeName, JSON.stringify(items));
-    
-    // Niezależny sejf na zadania (ochrona przed znikaniem)
-    if (type === 'inspection' && (isStandaloneNote(record) || record.przyszleDzialania)) {
-      let perm = JSON.parse(localStorage.getItem('pasieka_permanent_todos_v96') || '{}');
-      perm[record.id] = record;
-      localStorage.setItem('pasieka_permanent_todos_v96', JSON.stringify(perm));
-    }
-  } catch (e) {}
-  return true;
-}
-
-async function deleteLocalRecordPermanent(type, id) {
-  const storeName = type + 's';
-  try {
-    let items = getLocalRecords(type).filter(i => i.id !== id);
-    localStorage.setItem('pasieka_' + storeName, JSON.stringify(items));
-  } catch (e) {}
-  return true;
-}
-
-// Ochrona lokalnych wpisów przed nadpisaniem z Google Sheets pustymi polami (stary skrypt)
-function mergeInspectionSafely(local, remote) {
-  let merged = { ...remote };
-  if (!remote.przyszleDzialania && local.przyszleDzialania) {
-    merged.przyszleDzialania = local.przyszleDzialania;
+    const raw = JSON.parse(localStorage.getItem('pasieka_' + storeName) || '[]');
+    return Array.isArray(raw) ? raw : [];
+  } catch (e) {
+    return [];
   }
-  if (isStandaloneNote(local) && !remote.dzialania && local.dzialania) {
-    merged.dzialania = local.dzialania;
+}
+
+function saveLocalRecordsAll(type, items) {
+  const storeName = type + 's';
+  state[storeName] = items;
+  try {
+    localStorage.setItem('pasieka_' + storeName, JSON.stringify(items));
+  } catch (e) {
+    console.error("Błąd zapisu localStorage:", e);
+  }
+}
+
+function saveLocalRecord(type, record) {
+  const storeName = type + 's';
+  const items = getLocalRecords(type);
+  const idx = items.findIndex(i => i.id === record.id);
+  if (idx >= 0) items[idx] = record;
+  else items.push(record);
+  saveLocalRecordsAll(type, items);
+}
+
+function deleteLocalRecordPermanent(type, id) {
+  const items = getLocalRecords(type).filter(i => i.id !== id);
+  saveLocalRecordsAll(type, items);
+}
+
+// Bezpieczne scalanie rekordów z chmury (ochrona przed pustymi polami zadań)
+function mergeInspectionSafely(localItem, remoteItem) {
+  const merged = { ...remoteItem, syncStatus: 'synced' };
+  if (localItem && cleanTodoText(localItem.przyszleDzialania) && !cleanTodoText(remoteItem.przyszleDzialania)) {
+    merged.przyszleDzialania = localItem.przyszleDzialania;
   }
   return merged;
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
+// ==========================================
+// INICJALIZACJA APLIKACJI
+// ==========================================
+document.addEventListener('DOMContentLoaded', () => {
   initTabs();
   initHives();
   initForms();
@@ -269,7 +271,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (syncBtn) syncBtn.addEventListener('click', () => syncData(true));
   const headerSyncBtn = document.getElementById('btn-header-sync');
   if (headerSyncBtn) headerSyncBtn.addEventListener('click', () => syncData(true));
-  
+
   const btnSaveWebhook = document.getElementById('btn-save-webhook');
   if (btnSaveWebhook) {
     btnSaveWebhook.addEventListener('click', () => {
@@ -298,42 +300,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  await loadStateFromLocal();
-  await migrateLocalQueensToSyncRecords();
+  loadStateFromLocal();
   syncData(false);
+  console.log("PASIEKA v10.0 załadowana poprawnie!");
 });
 
-async function migrateLocalQueensToSyncRecords() {
-  let migrated = false;
-  for (let i = 1; i <= 18; i++) {
-    let localNote = '';
-    try { localNote = (localStorage.getItem(`pasieka_queen_${i}`) || '').trim(); } catch (e) {}
-    const existingRec = state.inspections.find(r => r.id === `queen_hive_${i}` && r.syncStatus !== 'pending_delete');
-    if (localNote && !existingRec) {
-      const payload = {
-        id: `queen_hive_${i}`,
-        timestamp: new Date().toISOString(),
-        hiveNum: String(i),
-        rodzina: 'OPIS_MATKI',
-        matka: 'TAK',
-        jaja: 'TAK',
-        ramkiCzerwiu: '0',
-        pokarm: 'OK',
-        polkorpus: '0',
-        dzialania: localNote,
-        przyszleDzialania: '',
-        updatedAt: Date.now().toString(),
-        syncStatus: 'pending_save'
-      };
-      await saveLocalRecord('inspection', payload);
-      migrated = true;
-    }
-  }
-  if (migrated) await loadStateFromLocal();
-}
-
-async function loadStateFromLocal() {
-  for (let t of TYPES) { state[t + 's'] = getLocalRecords(t); }
+function loadStateFromLocal() {
+  TYPES.forEach(t => {
+    state[t + 's'] = getLocalRecords(t);
+  });
   updatePendingCount();
   renderGlobalTables();
   renderTodos();
@@ -352,12 +327,12 @@ function updatePendingCount() {
 function initNetworkListeners() {
   window.addEventListener('online', () => {
     updateSyncUI();
-    showToast("Połączono z siecią 🟢 Rozpoczynam synchronizację...", "info");
+    showToast("Połączono z siecią 🟢 Synchronizuję...", "info");
     syncData(false);
   });
   window.addEventListener('offline', () => {
     updateSyncUI();
-    showToast("Tryb Offline 🟠 Dane zapisywane w pamięci urządzenia.", "warning");
+    showToast("Tryb Offline 🟠 Dane zapisywane lokalnie.", "warning");
   });
 }
 
@@ -385,139 +360,129 @@ function updateSyncUI() {
   }
 }
 
-// 100% BEZPIECZNA SYNCHRONIZACJA v9.6
+// ==========================================
+// SYNCHRONIZACJA Z GOOGLE SHEETS (BEZPIECZNA)
+// ==========================================
 async function syncData(userTriggered = false) {
   if (state.isSyncing) {
-    state.pendingSyncRetry = true;
+    pendingSyncRetry = true;
     return;
   }
-  
   const webhookUrl = getWebhookUrl();
   if (!webhookUrl) {
     updateSyncUI();
-    if (userTriggered) {
-      showToast("Brak linku Webhooka! Wklej go w zakładce 📊 Arkusz / Ustawienia!", "error");
-      const sheetBtn = document.querySelector('.tab-btn[data-tab="tab-sheet"]');
-      if (sheetBtn) sheetBtn.click();
-    }
+    if (userTriggered) showToast("Brak linku Webhooka! Wklej go w Ustawieniach.", "error");
     return;
   }
   if (!navigator.onLine) {
     if (userTriggered) showToast("Brak internetu. Dane czekają w pamięci urządzenia.", "warning");
     return;
   }
-  
+
   state.isSyncing = true;
+  pendingSyncRetry = false;
   updateSyncUI();
 
   try {
+    // 1. Zbierz lokalne zmiany do wysłania
     const changesToUpload = [];
     TYPES.forEach(t => {
-      const pluralType = t.endsWith('s') ? t : t + 's';
-      state[t + 's'].forEach(r => {
+      const pluralType = t + 's';
+      state[pluralType].forEach(r => {
         if (r.syncStatus && r.syncStatus !== 'synced') {
-          let timeVal = r.timestamp;
-          let hiveVal = String(r.hiveNum);
           changesToUpload.push({
             localType: t,
             type: pluralType,
             deleted: r.syncStatus === 'pending_delete',
-            data: { ...r, timestamp: timeVal, hiveNum: hiveVal, syncStatus: undefined }
+            data: { ...r, syncStatus: undefined }
           });
         }
       });
     });
 
+    // 2. Wyślij zmiany (batch_upsert)
     if (changesToUpload.length > 0) {
-      let batchSuccess = false;
-      try {
-        const batchResp = await fetch(webhookUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ action: 'batch_upsert', changes: changesToUpload })
-        });
-        const batchJson = await batchResp.json();
-        if (batchJson && (batchJson.status === 'success' || (batchJson.message && batchJson.message.includes('Zaktualizowano')))) {
-          batchSuccess = true;
-        }
-      } catch (errPost) { batchSuccess = false; }
-
-      if (!batchSuccess) {
-        for (let change of changesToUpload) {
-          try {
-            const reqBody = change.deleted 
-              ? { action: 'delete', type: change.type, id: change.data.id }
-              : { type: change.type, ...change.data };
-            const singleResp = await fetch(webhookUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-              body: JSON.stringify(reqBody)
-            });
-            const singleJson = await singleResp.json();
-            if (singleJson && (singleJson.status === 'success' || (singleJson.message && singleJson.message.includes('Zapisano')))) {
-              if (change.deleted) await deleteLocalRecordPermanent(change.localType, change.data.id);
+      const batchResp = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'batch_upsert', changes: changesToUpload })
+      });
+      const batchJson = await batchResp.json();
+      if (batchJson && batchJson.status === 'success') {
+        changesToUpload.forEach(change => {
+          if (change.deleted) {
+            deleteLocalRecordPermanent(change.localType, change.data.id);
+          } else {
+            const rec = getLocalRecords(change.localType).find(r => r.id === change.data.id);
+            if (rec && rec.updatedAt === change.data.updatedAt) {
+              rec.syncStatus = 'synced';
+              saveLocalRecord(change.localType, rec);
             }
-          } catch (eSingle) { console.error("Błąd wysyłki pojedynczej:", eSingle); }
-        }
-      } else {
-        for (let change of changesToUpload) {
-          if (change.deleted) await deleteLocalRecordPermanent(change.localType, change.data.id);
-        }
+          }
+        });
       }
     }
 
+    // 3. Pobierz aktualny stan z Arkusza Google
     const sep = webhookUrl.includes('?') ? '&' : '?';
     const response = await fetch(`${webhookUrl}${sep}_t=${Date.now()}`, { cache: 'no-store' });
     const res = await response.json();
-    
+
     if (res && typeof res === 'object') {
-      for (let t of TYPES) {
+      TYPES.forEach(t => {
         const storeName = t + 's';
-        const rawRemoteList = Array.isArray(res[storeName]) ? res[storeName] : (Array.isArray(res[t]) ? res[t] : []);
-        const remoteList = rawRemoteList.map(r => normalizeRecord(t, r)).filter(r => r !== null);
-        const localList = state[storeName] || [];
+        const rawRemoteList = Array.isArray(res[storeName]) ? res[storeName] : [];
+        const remoteList = rawRemoteList.map(r => normalizeRecord(t, r)).filter(Boolean);
+        const remoteIds = new Set(remoteList.map(r => r.id));
+
+        const localList = getLocalRecords(t);
         const localMap = new Map(localList.map(item => [item.id, item]));
 
-        for (let remoteItem of remoteList) {
+        remoteList.forEach(remoteItem => {
           const localItem = localMap.get(remoteItem.id);
           if (!localItem) {
-            remoteItem.syncStatus = 'synced';
-            await saveLocalRecord(t, remoteItem);
+            saveLocalRecord(t, { ...remoteItem, syncStatus: 'synced' });
+          } else if (localItem.syncStatus === 'synced') {
+            const merged = (t === 'inspection') ? mergeInspectionSafely(localItem, remoteItem) : { ...remoteItem, syncStatus: 'synced' };
+            saveLocalRecord(t, merged);
           } else {
-            if (t === 'inspection') {
-              remoteItem = mergeInspectionSafely(localItem, remoteItem);
-            }
-            if (localItem.syncStatus !== 'synced') {
-              const localTime = parseInt(localItem.updatedAt || '0');
-              const remoteTime = parseInt(remoteItem.updatedAt || '0');
-              if (remoteTime > localTime) {
-                remoteItem.syncStatus = 'synced';
-                await saveLocalRecord(t, remoteItem);
-              }
-            } else {
-              remoteItem.syncStatus = 'synced';
-              await saveLocalRecord(t, remoteItem);
+            const localTime = parseInt(localItem.updatedAt || '0', 10);
+            const remoteTime = parseInt(remoteItem.updatedAt || '0', 10);
+            if (remoteTime > localTime) {
+              const merged = (t === 'inspection') ? mergeInspectionSafely(localItem, remoteItem) : { ...remoteItem, syncStatus: 'synced' };
+              saveLocalRecord(t, merged);
             }
           }
-        }
-      }
-      await loadStateFromLocal();
+        });
+
+        // Usuwaj lokalnie TYLKO rekordy, które były już zsynchronizowane i zostały usunięte na innym urządzeniu
+        localList.forEach(localItem => {
+          if (localItem.syncStatus === 'synced' && !remoteIds.has(localItem.id)) {
+            deleteLocalRecordPermanent(t, localItem.id);
+          }
+        });
+      });
+
+      loadStateFromLocal();
       if (userTriggered) showToast("Synchronizacja ukończona pomyślnie! 🐝", "success");
     }
   } catch (err) {
     console.error("Błąd synchronizacji:", err);
-    if (userTriggered) showToast("Błąd połączenia z Arkuszem Google. Sprawdź Tarcze Brave i link Webhooka!", "error");
+    if (userTriggered) showToast("Błąd połączenia z Arkuszem Google. Sprawdź Tarcze Brave!", "error");
   } finally {
     state.isSyncing = false;
     updatePendingCount();
     updateSyncUI();
-    if (state.pendingSyncRetry) {
-      state.pendingSyncRetry = false;
-      setTimeout(() => syncData(false), 500);
+    if (pendingSyncRetry) {
+      pendingSyncRetry = false;
+      setTimeout(() => syncData(false), 300);
     }
   }
 }
 
+// ==========================================
+// ZAKŁADKA ZADANIA (FORMULARZ I LISTA)
+// ==========================================
 function toggleTodoScopeSelect() {
   const scopeRadio = document.querySelector('input[name="todoScopeType"]:checked');
   const pasiekaBox = document.getElementById('todo-scope-pasieka-box');
@@ -533,6 +498,18 @@ function toggleTodoScopeSelect() {
   }
 }
 
+function setTodoFilter(mode) {
+  currentTodoFilter = mode;
+  const btnAll = document.getElementById('filter-btn-all');
+  const btnPending = document.getElementById('filter-btn-pending');
+  const btnDone = document.getElementById('filter-btn-done');
+
+  if (btnAll) btnAll.style.opacity = mode === 'ALL' ? '1' : '0.65';
+  if (btnPending) btnPending.style.opacity = mode === 'PENDING' ? '1' : '0.65';
+  if (btnDone) btnDone.style.opacity = mode === 'DONE' ? '1' : '0.65';
+  renderTodos();
+}
+
 function initTodoForm() {
   const form = document.getElementById('todo-form');
   const dateInput = document.getElementById('input-todo-date');
@@ -540,15 +517,11 @@ function initTodoForm() {
   toggleTodoScopeSelect();
   if (!form) return;
 
-  form.addEventListener('submit', async (e) => {
+  form.addEventListener('submit', (e) => {
     e.preventDefault();
-    const btn = document.getElementById('btn-submit-todo');
-    if (btn) btn.disabled = true;
-    setTimeout(() => { if (btn) btn.disabled = false; }, 1000);
-
     const isEdit = !!form.dataset.editId;
     const recordId = isEdit ? form.dataset.editId : 'todo_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
-    
+
     const scopeType = document.querySelector('input[name="todoScopeType"]:checked')?.value || 'PASIEKA';
     const pasiekaVal = document.getElementById('select-todo-pasieka')?.value || 'CAŁA PASIEKA';
     const hiveVal = document.getElementById('select-todo-hive')?.value || '1';
@@ -557,7 +530,7 @@ function initTodoForm() {
     const initStatus = document.querySelector('input[name="todoInitStatus"]:checked')?.value || 'TODO';
 
     if (!textVal) {
-      showToast("Wpisz treść notatki!", "warning");
+      showToast("Wpisz treść zadania!", "warning");
       return;
     }
 
@@ -576,7 +549,6 @@ function initTodoForm() {
       else safeHiveNum = '1';
     }
 
-    const finalText = isDone ? `[X] ${textVal}` : textVal;
     const payload = {
       id: recordId,
       timestamp: new Date(dateVal).toISOString(),
@@ -588,17 +560,15 @@ function initTodoForm() {
       pokarm: 'OK',
       polkorpus: '0',
       dzialania: isDone ? 'WYKONANE' : 'DO ZROBIENIA',
-      przyszleDzialania: finalText,
+      przyszleDzialania: isDone ? `[X] ${textVal}` : textVal,
       updatedAt: Date.now().toString(),
       syncStatus: 'pending_save'
     };
 
-    try { localStorage.setItem('todo_done_' + recordId, isDone.toString()); } catch (err) {}
-
-    await saveLocalRecord('inspection', payload);
-    await loadStateFromLocal();
+    saveLocalRecord('inspection', payload);
+    loadStateFromLocal();
     resetTodoForm();
-    showToast(isEdit ? "Zaktualizowano notatkę! Synchronizuję..." : "Zapisano notatkę! Synchronizuję...", "success");
+    showToast(isEdit ? "Zaktualizowano zadanie!" : "Zapisano zadanie!", "success");
 
     if (navigator.onLine) syncData(false);
   });
@@ -608,27 +578,24 @@ function resetTodoForm() {
   const form = document.getElementById('todo-form');
   if (form) delete form.dataset.editId;
   const title = document.getElementById('todo-form-title');
-  if (title) title.innerText = '➕ Dodaj Notatkę / Zadanie';
+  if (title) title.innerText = '➕ Dodaj Zadanie / Notatkę';
   const btn = document.getElementById('btn-submit-todo');
-  if (btn) btn.innerHTML = '💾 ZAPISZ NOTATKĘ I SYNCHRONIZUJ';
+  if (btn) btn.innerHTML = '💾 ZAPISZ ZADANIE I SYNCHRONIZUJ';
   const cancelBtn = document.getElementById('btn-cancel-todo-edit');
   if (cancelBtn) cancelBtn.classList.add('hidden');
   const textInput = document.getElementById('input-todo-text');
   if (textInput) textInput.value = '';
-  
+
   const radioPasieka = document.querySelector('input[name="todoScopeType"][value="PASIEKA"]');
   if (radioPasieka) radioPasieka.checked = true;
   toggleTodoScopeSelect();
 
   const pasiekaSelect = document.getElementById('select-todo-pasieka');
   if (pasiekaSelect) pasiekaSelect.value = 'CAŁA PASIEKA';
-
   const hiveSelect = document.getElementById('select-todo-hive');
   if (hiveSelect) hiveSelect.value = '1';
-
   const statusTodo = document.querySelector('input[name="todoInitStatus"][value="TODO"]');
   if (statusTodo) statusTodo.checked = true;
-
   const dateInput = document.getElementById('input-todo-date');
   if (dateInput) dateInput.value = getCurrentLocalISO();
 }
@@ -642,13 +609,10 @@ function editStandaloneTodo(id) {
 
   const form = document.getElementById('todo-form');
   if (form) form.dataset.editId = id;
-
   const title = document.getElementById('todo-form-title');
-  if (title) title.innerText = '✏️ Edycja Notatki / Zadania';
-
+  if (title) title.innerText = '✏️ Edycja Zadania / Notatki';
   const btn = document.getElementById('btn-submit-todo');
-  if (btn) btn.innerHTML = '💾 ZAKTUALIZUJ NOTATKĘ';
-
+  if (btn) btn.innerHTML = '💾 ZAKTUALIZUJ ZADANIE';
   const cancelBtn = document.getElementById('btn-cancel-todo-edit');
   if (cancelBtn) cancelBtn.classList.remove('hidden');
 
@@ -674,10 +638,8 @@ function editStandaloneTodo(id) {
   const tzOffset = new Date().getTimezoneOffset() * 60000;
   let parsedDate = new Date(rec.timestamp);
   if (isNaN(parsedDate.getTime())) parsedDate = new Date();
-  const localISOTime = (new Date(parsedDate - tzOffset)).toISOString().slice(0, 16);
-
   const dateInput = document.getElementById('input-todo-date');
-  if (dateInput) dateInput.value = localISOTime;
+  if (dateInput) dateInput.value = (new Date(parsedDate - tzOffset)).toISOString().slice(0, 16);
 
   const textInput = document.getElementById('input-todo-text');
   if (textInput) textInput.value = cleanTodoText(rec.przyszleDzialania);
@@ -685,20 +647,130 @@ function editStandaloneTodo(id) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+function isTodoDone(recordOrId) {
+  let rec = typeof recordOrId === 'object' ? recordOrId : state.inspections.find(r => r.id === recordOrId);
+  if (!rec) return false;
+  if (String(rec.przyszleDzialania || '').trim().toUpperCase().startsWith('[X]')) return true;
+  if (isStandaloneNote(rec) && rec.dzialania === 'WYKONANE') return true;
+  return false;
+}
+
+function toggleTodo(id) {
+  const rec = state.inspections.find(r => r.id === id);
+  if (!rec) return;
+
+  const newDone = !isTodoDone(rec);
+  const cleanText = cleanTodoText(rec.przyszleDzialania);
+
+  rec.przyszleDzialania = newDone ? `[X] ${cleanText}` : cleanText;
+  if (isStandaloneNote(rec)) {
+    rec.dzialania = newDone ? 'WYKONANE' : 'DO ZROBIENIA';
+  }
+  rec.updatedAt = Date.now().toString();
+  rec.syncStatus = 'pending_save';
+
+  saveLocalRecord('inspection', rec);
+  loadStateFromLocal();
+  showToast(newDone ? "Oznaczono jako WYKONANE ✅" : "Oznaczono jako DO ZROBIENIA ⏳", "info");
+  if (navigator.onLine) syncData(false);
+}
+
+function buildTodoItemHTML(t) {
+  const isDone = isTodoDone(t);
+  const standalone = isStandaloneNote(t);
+  const strike = isDone ? 'text-decoration: line-through; color: #6b7280;' : '';
+  const boxMark = isDone ? '✓' : '&nbsp;';
+  const boxStyle = isDone
+    ? 'background:#059669; color:white; border:2px solid #047857;'
+    : 'background:white; color:#111827; border:2px solid #d97706;';
+
+  const targetBadgeLabel = getTodoTargetLabel(t);
+  const isWholeApiary = standalone && String(t.matka || '').toUpperCase().includes('PASIEKA');
+  const badgeColor = isWholeApiary
+    ? 'background:#d1fae5; color:#065f46; border:1px solid #34d399;'
+    : 'background:#fef3c7; color:#92400e; border:1px solid #f59e0b;';
+  const typeLabel = standalone ? '📝 Niezależna notatka' : '📋 Z przeglądu';
+  const statusBadge = isDone
+    ? '<span style="background:#059669; color:#fff; padding:2px 8px; border-radius:4px; font-size:0.75rem; font-weight:bold;">✅ WYKONANE</span>'
+    : '<span style="background:#f59e0b; color:#fff; padding:2px 8px; border-radius:4px; font-size:0.75rem; font-weight:bold;">⏳ DO ZROBIENIA</span>';
+  const textClean = cleanTodoText(t.przyszleDzialania);
+
+  return `<li style="padding: 12px 14px; border: 1px solid ${isDone ? '#a7f3d0' : '#fde68a'}; display:flex; align-items:center; gap:12px; background:${isDone ? '#f0fdf4' : '#fffbeb'}; margin-bottom:8px; border-radius:8px; flex-wrap:wrap;">
+    <button type="button" onclick="toggleTodo('${t.id}')" style="width:36px; height:36px; font-weight:900; font-size:1.15rem; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; ${boxStyle}" title="Zmień status">
+      ${boxMark}
+    </button>
+    <div style="flex:1; min-width:200px;">
+      <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:4px;">
+        ${statusBadge}
+        <span style="${badgeColor} padding:2px 8px; border-radius:6px; font-weight:bold; font-size:0.85rem;">${targetBadgeLabel}</span>
+        <span style="font-size:0.78rem; color:#374151; background:#e5e7eb; padding:2px 6px; border-radius:4px;">${typeLabel}</span>
+        <small style="color:#4b5563; font-weight:bold;">📅 ${fd(t.timestamp)} ${t.syncStatus === 'pending_save' ? '🟠' : ''}</small>
+      </div>
+      <div style="font-weight:700; font-size:1.02rem; word-break:break-word; ${strike}">${textClean}</div>
+    </div>
+    <div style="display:flex; gap:6px; align-items:center;">
+      <button type="button" onclick="toggleTodo('${t.id}')" class="btn-small" style="background:${isDone ? '#f59e0b' : '#059669'}; color:white; font-weight:bold;">
+        ${isDone ? '↩ Cofnij' : '✓ Wykonane'}
+      </button>
+      <button type="button" onclick="editRecord('${t.id}', 'inspection')" class="btn-small" title="Edytuj">✏️</button>
+      <button type="button" onclick="deleteRecord('${t.id}', 'inspection')" class="btn-small" style="background:#dc2626; color:white;" title="Usuń">🗑️</button>
+    </div>
+  </li>`;
+}
+
+function renderTodos() {
+  const ulMain = document.getElementById('todo-list-main');
+  if (!ulMain) return;
+
+  const allTodos = state.inspections.filter(i => {
+    if (i.syncStatus === 'pending_delete') return false;
+    if (isQueenRecord(i)) return false;
+    const val = cleanTodoText(i.przyszleDzialania);
+    const lower = val.toLowerCase();
+    return val.length > 0 && !['0', 'brak', 'brak planów', 'brak planu', 'brak uwag', 'brak dzialan', 'brak działań', 'nie', '-'].includes(lower);
+  });
+
+  const pendingList = allTodos.filter(t => !isTodoDone(t));
+  const doneList = allTodos.filter(t => isTodoDone(t));
+
+  const cAll = document.getElementById('count-todo-all');
+  const cPend = document.getElementById('count-todo-pending');
+  const cDone = document.getElementById('count-todo-done');
+  if (cAll) cAll.innerText = allTodos.length;
+  if (cPend) cPend.innerText = pendingList.length;
+  if (cDone) cDone.innerText = doneList.length;
+
+  let displayList = allTodos;
+  if (currentTodoFilter === 'PENDING') displayList = pendingList;
+  else if (currentTodoFilter === 'DONE') displayList = doneList;
+
+  // Najpierw niewykonane, potem wykonane, w ramach grup od najnowszych
+  displayList = displayList.slice().sort((a, b) => {
+    const dA = isTodoDone(a) ? 1 : 0;
+    const dB = isTodoDone(b) ? 1 : 0;
+    if (dA !== dB) return dA - dB;
+    return new Date(b.timestamp) - new Date(a.timestamp);
+  });
+
+  if (displayList.length === 0) {
+    ulMain.innerHTML = '<li style="padding:14px; color:#6b7280; font-style:italic;">Brak zadań w tym widoku.</li>';
+  } else {
+    ulMain.innerHTML = displayList.map(t => buildTodoItemHTML(t)).join('');
+  }
+}
+
+// ==========================================
+// FORMULARZE PRZEGLĄDÓW, KARMIENIA, LECZENIA, IZO
+// ==========================================
 function initForms() {
   TYPES.forEach(type => {
     const form = document.getElementById(`${type}-form`);
     if (!form) return;
-    form.addEventListener('submit', async (e) => {
+    form.addEventListener('submit', (e) => {
       e.preventDefault();
       const formEl = e.target;
-      const btn = formEl.querySelector('button[type="submit"]');
-      if (btn) btn.disabled = true;
-      setTimeout(() => { if (btn) btn.disabled = false; }, 1200);
-
       const isEdit = !!formEl.dataset.editId;
       const recordId = isEdit ? formEl.dataset.editId : 'rec_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
-      const nowTime = Date.now().toString();
       const currentHive = document.getElementById(`select-${type === 'inspection' ? '' : type + '-'}hive`).value;
       const currentDateVal = document.getElementById(`input-${type === 'inspection' ? '' : type + '-'}date`).value;
 
@@ -706,7 +778,7 @@ function initForms() {
         id: recordId,
         timestamp: new Date(currentDateVal).toISOString(),
         hiveNum: String(currentHive),
-        updatedAt: nowTime,
+        updatedAt: Date.now().toString(),
         syncStatus: 'pending_save'
       };
 
@@ -718,7 +790,8 @@ function initForms() {
             rawPlan = `[X] ${cleanTodoText(rawPlan)}`;
           }
         }
-        payload = { ...payload,
+        payload = {
+          ...payload,
           matka: document.querySelector('input[name="matka"]:checked')?.value || '',
           jaja: document.querySelector('input[name="jaja"]:checked')?.value || '',
           pokarm: document.querySelector('input[name="pokarm"]:checked')?.value || '',
@@ -738,27 +811,29 @@ function initForms() {
           updateIzoLeczenieDate(currentDateVal);
           wyliczonaData = document.getElementById('input-izo-kiedy-leczyc')?.value;
         }
-        payload = { ...payload, 
-          izoType: document.querySelector('input[name="izoType"]:checked')?.value || 'IZO-pocz', 
-          ramka: document.getElementById('input-izo-ramka')?.value || '1', 
-          kiedyLeczyc: formatToPLDate(wyliczonaData) 
+        payload = {
+          ...payload,
+          izoType: document.querySelector('input[name="izoType"]:checked')?.value || 'IZO-pocz',
+          ramka: document.getElementById('input-izo-ramka')?.value || '1',
+          kiedyLeczyc: formatToPLDate(wyliczonaData)
         };
       }
 
-      await saveLocalRecord(type, payload);
-      await loadStateFromLocal();
+      saveLocalRecord(type, payload);
+      loadStateFromLocal();
       showToast(isEdit ? "Zaktualizowano wpis!" : "Zapisano wpis w pasiece!", "success");
-      
+
       delete formEl.dataset.editId;
+      const btn = formEl.querySelector('button[type="submit"]');
       if (btn) btn.innerHTML = btn.innerHTML.replace('ZAKTUALIZUJ', 'ZAPISZ');
-      
+
       openForm(type, currentHive);
       if (navigator.onLine) syncData(false);
     });
   });
 }
 
-async function deleteRecord(id, type, currentHiveNum = null) {
+function deleteRecord(id, type, currentHiveNum = null) {
   if (!confirm("Na pewno usunąć ten wpis?")) return;
   const storeName = type + 's';
   const item = state[storeName].find(r => r.id === id);
@@ -766,10 +841,10 @@ async function deleteRecord(id, type, currentHiveNum = null) {
     const hiveToRefresh = currentHiveNum || item.hiveNum;
     item.syncStatus = 'pending_delete';
     item.updatedAt = Date.now().toString();
-    await saveLocalRecord(type, item);
-    await loadStateFromLocal();
-    if (hiveToRefresh && parseInt(hiveToRefresh) <= 18) renderLocalHistory(type, hiveToRefresh);
-    showToast("Wpis oznaczony do usunięcia.", "warning");
+    saveLocalRecord(type, item);
+    loadStateFromLocal();
+    if (hiveToRefresh && parseInt(hiveToRefresh, 10) <= 18) renderLocalHistory(type, hiveToRefresh);
+    showToast("Wpis usunięty.", "warning");
     if (navigator.onLine) syncData(false);
   }
 }
@@ -814,7 +889,7 @@ function editRecord(id, type) {
   } else if (type === 'izo') {
     const izoT = document.querySelector(`input[name="izoType"][value="${record.izoType}"]`); if (izoT) izoT.checked = true;
     const ramka = document.getElementById('input-izo-ramka'); if (ramka) ramka.value = record.ramka;
-    const kiedy = document.getElementById('input-izo-kiedy-leczyc'); 
+    const kiedy = document.getElementById('input-izo-kiedy-leczyc');
     if (kiedy) {
       const formatted = formatForDateInput(record.kiedyLeczyc);
       if (formatted) kiedy.value = formatted;
@@ -824,6 +899,9 @@ function editRecord(id, type) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+// ==========================================
+// NAWIGACJA, ULE I OPISY MATEK
+// ==========================================
 function initTabs() {
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
@@ -831,9 +909,7 @@ function initTabs() {
       const targetBtn = e.currentTarget;
       targetBtn.classList.add('active');
       const targetTabId = targetBtn.dataset.tab;
-      if (['tab-dom', 'tab-zbior', 'tab-las'].includes(targetTabId)) {
-        lastActiveHiveTab = targetTabId;
-      }
+      if (['tab-dom', 'tab-zbior', 'tab-las'].includes(targetTabId)) lastActiveHiveTab = targetTabId;
       const tabContent = document.getElementById(targetTabId);
       if (tabContent) tabContent.classList.add('active');
       if (targetTabId === 'tab-todo') {
@@ -857,38 +933,43 @@ function goToHistory(pluralType) {
   if (sheetBtn) sheetBtn.click();
   setTimeout(() => {
     const wrapper = document.getElementById(`wrapper-${pluralType}-table`);
-    if (wrapper) {
-      wrapper.classList.remove('hidden');
-      wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+    if (wrapper) wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, 100);
 }
 
-async function saveQueenNote(hiveNum) {
+function saveQueenNote(hiveNum) {
   const input = document.getElementById(`queen-note-${hiveNum}`);
   if (!input) return;
   const noteText = input.value.trim();
   const recordId = `queen_hive_${hiveNum}`;
+
   try { localStorage.setItem(`pasieka_queen_${hiveNum}`, noteText); } catch (e) {}
 
   const payload = {
-    id: recordId, timestamp: new Date().toISOString(), hiveNum: String(hiveNum),
-    rodzina: 'OPIS_MATKI', matka: 'TAK', jaja: 'TAK', ramkiCzerwiu: '0', pokarm: 'OK', polkorpus: '0',
-    dzialania: noteText, przyszleDzialania: '', updatedAt: Date.now().toString(), syncStatus: 'pending_save'
+    id: recordId,
+    timestamp: new Date().toISOString(),
+    hiveNum: String(hiveNum),
+    rodzina: 'OPIS_MATKI',
+    matka: 'TAK',
+    jaja: 'TAK',
+    ramkiCzerwiu: '0',
+    pokarm: 'OK',
+    polkorpus: '0',
+    dzialania: noteText,
+    przyszleDzialania: '',
+    updatedAt: Date.now().toString(),
+    syncStatus: 'pending_save'
   };
 
-  await saveLocalRecord('inspection', payload);
-  await loadStateFromLocal();
-  showToast(`Zapisano matkę Ula ${hiveNum} 👑 (Synchronizuję...)`, 'success');
+  saveLocalRecord('inspection', payload);
+  loadStateFromLocal();
+  showToast(`Zapisano matkę Ula ${hiveNum} 👑`, 'success');
   if (navigator.onLine) syncData(false);
 }
 
 function getQueenNote(hiveNum) {
   const rec = (state.inspections || []).find(r => r.id === `queen_hive_${hiveNum}` && r.syncStatus !== 'pending_delete');
-  if (rec && rec.dzialania !== undefined) {
-    try { localStorage.setItem(`pasieka_queen_${hiveNum}`, rec.dzialania); } catch (e) {}
-    return rec.dzialania;
-  }
+  if (rec && rec.dzialania !== undefined) return rec.dzialania;
   try { return localStorage.getItem(`pasieka_queen_${hiveNum}`) || ''; } catch (e) { return ''; }
 }
 
@@ -906,7 +987,7 @@ function initHives() {
             <div class="queen-note-box">
               <span>👑</span>
               <input type="text" id="queen-note-${i}" value="${qNote}" placeholder="Opis matki (np. Krainka 25)" onchange="saveQueenNote(${i})">
-              <button type="button" class="btn-queen-save" onclick="saveQueenNote(${i})" title="Zapisz i synchronizuj opis matki">💾</button>
+              <button type="button" class="btn-queen-save" onclick="saveQueenNote(${i})" title="Zapisz opis matki">💾</button>
             </div>
           </div>
           <div id="hive-desc-${i}" style="margin: 8px 0; min-height: 4.5rem;">
@@ -937,7 +1018,7 @@ function updateHiveCards() {
     let hiveInspections = state.inspections
       .filter(r => String(r.hiveNum) === String(i) && r.syncStatus !== 'pending_delete' && !isSystemInspectionRecord(r))
       .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    
+
     if (hiveInspections.length > 0) {
       let last = hiveInspections[0];
       const planClean = cleanTodoText(last.przyszleDzialania);
@@ -957,8 +1038,7 @@ function updateHiveCards() {
           </div>
           ${last.dzialania ? `<div class="hive-last-dzialania">🛠️ <b>Działania:</b> ${last.dzialania}</div>` : ''}
           ${planClean && planClean !== '0' && planClean.toLowerCase() !== 'brak' ? `<div class="hive-last-plan" style="${planDone ? 'text-decoration:line-through; opacity:0.75;' : ''}">📋 <b>Plan:</b> ${planClean} ${planDone ? '✅' : ''}</div>` : ''}
-        </div>
-      `;
+        </div>`;
     } else {
       descDiv.innerHTML = `<span style="color:#9ca3af; font-style:italic; font-size:0.85rem;">Brak historii przeglądów</span>`;
     }
@@ -983,7 +1063,6 @@ function openForm(type, hiveNum) {
 
   const inputDate = document.getElementById(`input-${type === 'inspection' ? '' : type + '-'}date`);
   if (inputDate) inputDate.value = nowStr;
-
   if (type === 'izo') updateIzoLeczenieDate(nowStr);
 
   const form = document.getElementById(`${type}-form`);
@@ -999,12 +1078,9 @@ function updateIzoLeczenieDate(sourceDateStr) {
   let d = new Date(sourceDateStr);
   if (!isNaN(d.getTime())) {
     d.setDate(d.getDate() + 24);
-    const kiedyLeczycEl = document.getElementById('input-izo-kiedy-leczyc');
-    if (kiedyLeczycEl) {
-      let yyyy = d.getFullYear();
-      let mm = String(d.getMonth() + 1).padStart(2, '0');
-      let dd = String(d.getDate()).padStart(2, '0');
-      kiedyLeczycEl.value = `${yyyy}-${mm}-${dd}`;
+    const el = document.getElementById('input-izo-kiedy-leczyc');
+    if (el) {
+      el.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     }
   }
 }
@@ -1016,6 +1092,9 @@ function fd(d) {
   return dateObj.toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' });
 }
 
+// ==========================================
+// TABELE GLOBALNE I HISTORIA LOKALNA
+// ==========================================
 function sortTableBy(pluralType, key) {
   const current = sortConfig[pluralType];
   if (current.key === key) current.dir = current.dir === 'asc' ? 'desc' : 'asc';
@@ -1028,14 +1107,16 @@ function getSortedRecords(pluralType) {
   let list = (state[pluralType] || []).filter(r => r.syncStatus !== 'pending_delete');
   if (pluralType === 'inspections') list = list.filter(r => !isSystemInspectionRecord(r));
   return list.sort((a, b) => {
-    let valA = a[cfg.key];
-    let valB = b[cfg.key];
+    let valA = a[cfg.key], valB = b[cfg.key];
     if (cfg.key === 'timestamp') {
-      valA = new Date(valA || 0).getTime(); valB = new Date(valB || 0).getTime();
+      valA = new Date(valA || 0).getTime();
+      valB = new Date(valB || 0).getTime();
     } else if (['hiveNum', 'ramkiCzerwiu', 'polkorpus', 'kgCukru', 'ramka'].includes(cfg.key)) {
-      valA = parseFloat(valA) || 0; valB = parseFloat(valB) || 0;
+      valA = parseFloat(valA) || 0;
+      valB = parseFloat(valB) || 0;
     } else {
-      valA = String(valA || '').toLowerCase(); valB = String(valB || '').toLowerCase();
+      valA = String(valA || '').toLowerCase();
+      valB = String(valB || '').toLowerCase();
     }
     if (valA < valB) return cfg.dir === 'asc' ? -1 : 1;
     if (valA > valB) return cfg.dir === 'asc' ? 1 : -1;
@@ -1047,12 +1128,11 @@ function renderSortableHeader(pluralType, columns) {
   const thead = document.getElementById(`head-${pluralType}`);
   if (!thead) return;
   const cfg = sortConfig[pluralType];
-  const ths = columns.map(col => {
+  thead.innerHTML = `<tr>${columns.map(col => {
     if (!col.key) return `<th>${col.label}</th>`;
     const arrow = cfg.key === col.key ? (cfg.dir === 'asc' ? ' ▲' : ' ▼') : ' ↕';
     return `<th class="sortable" onclick="sortTableBy('${pluralType}', '${col.key}')">${col.label}<span style="font-size:0.75rem; color:#d97706;">${arrow}</span></th>`;
-  }).join('');
-  thead.innerHTML = `<tr>${ths}</tr>`;
+  }).join('')}</tr>`;
 }
 
 function renderGlobalTables() {
@@ -1061,22 +1141,19 @@ function renderGlobalTables() {
     { key: 'rodzina', label: 'Rodzina' }, { key: 'matka', label: 'Matka' },
     { key: 'jaja', label: 'Jaja' }, { key: 'ramkiCzerwiu', label: 'Czerw' },
     { key: 'pokarm', label: 'Pokarm' }, { key: 'polkorpus', label: 'Nadstawki' },
-    { key: 'dzialania', label: 'Wykonane Działania' }, { key: 'przyszleDzialania', label: 'Planowane Działania' },
+    { key: 'dzialania', label: 'Wykonane Działania' }, { key: 'przyszleDzialania', label: 'Plan' },
     { key: null, label: 'Akcje' }
   ]);
-
   renderSortableHeader('feedings', [
     { key: 'timestamp', label: 'Data i Czas' }, { key: 'hiveNum', label: 'Ul' },
     { key: 'kgCukru', label: 'Ilość (kg)' }, { key: 'uwagi', label: 'Uwagi / Syrop' },
     { key: null, label: 'Akcje' }
   ]);
-
   renderSortableHeader('treatments', [
     { key: 'timestamp', label: 'Data i Czas' }, { key: 'hiveNum', label: 'Ul' },
     { key: 'preparat', label: 'Preparat / Metoda' }, { key: 'uwagi', label: 'Dawka / Uwagi' },
     { key: null, label: 'Akcje' }
   ]);
-
   renderSortableHeader('izos', [
     { key: 'timestamp', label: 'Data i Czas' }, { key: 'hiveNum', label: 'Ul' },
     { key: 'izoType', label: 'Operacja (IZO)' }, { key: 'ramka', label: 'Po ramce' },
@@ -1084,16 +1161,7 @@ function renderGlobalTables() {
   ]);
 
   const tbodyInsp = document.getElementById('sheet-tbody');
-  const tbodyFeed = document.getElementById('feedings-tbody');
-  const tbodyTreat = document.getElementById('treatments-tbody');
-  const tbodyIzo = document.getElementById('izos-tbody');
-
-  const activeInsp = getSortedRecords('inspections');
-  const activeFeed = getSortedRecords('feedings');
-  const activeTreat = getSortedRecords('treatments');
-  const activeIzo = getSortedRecords('izos');
-
-  if (tbodyInsp) tbodyInsp.innerHTML = activeInsp.map(r => `
+  if (tbodyInsp) tbodyInsp.innerHTML = getSortedRecords('inspections').map(r => `
     <tr>
       <td>${fd(r.timestamp)} ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td>
       <td><b>Ul ${r.hiveNum}</b></td><td>${r.rodzina || ''}</td><td>${r.matka || ''}</td>
@@ -1106,7 +1174,8 @@ function renderGlobalTables() {
       </td>
     </tr>`).join('');
 
-  if (tbodyFeed) tbodyFeed.innerHTML = activeFeed.map(r => `
+  const tbodyFeed = document.getElementById('feedings-tbody');
+  if (tbodyFeed) tbodyFeed.innerHTML = getSortedRecords('feedings').map(r => `
     <tr>
       <td>${fd(r.timestamp)} ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td>
       <td><b>Ul ${r.hiveNum}</b></td><td><b>${r.kgCukru || '0'} kg</b></td><td>${r.uwagi || ''}</td>
@@ -1116,7 +1185,8 @@ function renderGlobalTables() {
       </td>
     </tr>`).join('');
 
-  if (tbodyTreat) tbodyTreat.innerHTML = activeTreat.map(r => `
+  const tbodyTreat = document.getElementById('treatments-tbody');
+  if (tbodyTreat) tbodyTreat.innerHTML = getSortedRecords('treatments').map(r => `
     <tr>
       <td>${fd(r.timestamp)} ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td>
       <td><b>Ul ${r.hiveNum}</b></td><td><b>${r.preparat || ''}</b></td><td>${r.uwagi || ''}</td>
@@ -1126,7 +1196,8 @@ function renderGlobalTables() {
       </td>
     </tr>`).join('');
 
-  if (tbodyIzo) tbodyIzo.innerHTML = activeIzo.map(r => `
+  const tbodyIzo = document.getElementById('izos-tbody');
+  if (tbodyIzo) tbodyIzo.innerHTML = getSortedRecords('izos').map(r => `
     <tr>
       <td>${fd(r.timestamp)} ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td>
       <td><b>Ul ${r.hiveNum}</b></td><td><b>${r.izoType || ''}</b></td><td>Ramka: ${r.ramka || ''}</td>
@@ -1146,197 +1217,42 @@ function renderLocalHistory(type, hiveNum) {
     .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
   if (data.length === 0) {
-    container.innerHTML = `<p style="padding:10px; color:#6b7280; font-style:italic;">Brak wcześniejszych wpisów w tej kategorii dla Ula ${hiveNum}.</p>`;
+    container.innerHTML = `<p style="padding:10px; color:#6b7280; font-style:italic;">Brak wcześniejszych wpisów dla Ula ${hiveNum}.</p>`;
     return;
   }
-  
+
   if (type === 'inspection') {
-    container.innerHTML = `
-      <div class="table-scroll-container">
-        <table class="data-table">
-          <thead><tr><th>Data</th><th>Rodzina</th><th>Matka</th><th>Jaja</th><th>Czerw</th><th>Pokarm</th><th>Nadstawki</th><th>Wykonane Działania</th><th>Plan</th><th>Akcje</th></tr></thead>
-          <tbody>
-            ${data.map(r => `
-              <tr>
-                <td><b>${fd(r.timestamp)}</b> ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td>
-                <td>${r.rodzina || '-'}</td><td>${r.matka || '-'}</td><td>${r.jaja || '-'}</td>
-                <td><b>${r.ramkiCzerwiu || '0'}</b></td><td>${r.pokarm || '-'}</td><td>${r.polkorpus || '0'}</td>
-                <td>${r.dzialania || '-'}</td>
-                <td>${cleanTodoText(r.przyszleDzialania) || '-'} ${isTodoDone(r) && cleanTodoText(r.przyszleDzialania) ? '✅' : ''}</td>
-                <td>
-                  <button type="button" onclick="editRecord('${r.id}', 'inspection')" class="btn-small">✏️</button>
-                  <button type="button" onclick="deleteRecord('${r.id}', 'inspection', '${hiveNum}')" class="btn-small" style="background:#dc2626; color:white;">🗑️</button>
-                </td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>`;
+    container.innerHTML = `<div class="table-scroll-container"><table class="data-table"><thead><tr><th>Data</th><th>Rodzina</th><th>Matka</th><th>Jaja</th><th>Czerw</th><th>Pokarm</th><th>Nadstawki</th><th>Działania</th><th>Plan</th><th>Akcje</th></tr></thead><tbody>${data.map(r => `
+      <tr>
+        <td><b>${fd(r.timestamp)}</b> ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td>
+        <td>${r.rodzina || '-'}</td><td>${r.matka || '-'}</td><td>${r.jaja || '-'}</td>
+        <td><b>${r.ramkiCzerwiu || '0'}</b></td><td>${r.pokarm || '-'}</td><td>${r.polkorpus || '0'}</td>
+        <td>${r.dzialania || '-'}</td><td>${cleanTodoText(r.przyszleDzialania) || '-'} ${isTodoDone(r) && cleanTodoText(r.przyszleDzialania) ? '✅' : ''}</td>
+        <td><button type="button" onclick="editRecord('${r.id}', 'inspection')" class="btn-small">✏️</button> <button type="button" onclick="deleteRecord('${r.id}', 'inspection', '${hiveNum}')" class="btn-small" style="background:#dc2626; color:white;">🗑️</button></td>
+      </tr>`).join('')}</tbody></table></div>`;
   } else if (type === 'feeding') {
-    container.innerHTML = `
-      <div class="table-scroll-container">
-        <table class="data-table">
-          <thead><tr><th>Data</th><th>Ul</th><th>Ilość (kg)</th><th>Uwagi</th><th>Akcje</th></tr></thead>
-          <tbody>
-            ${data.map(r => `
-              <tr>
-                <td><b>${fd(r.timestamp)}</b> ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td>
-                <td>Ul ${r.hiveNum}</td><td><b>${r.kgCukru || '0'} kg</b></td><td>${r.uwagi || '-'}</td>
-                <td>
-                  <button type="button" onclick="editRecord('${r.id}', 'feeding')" class="btn-small">✏️</button>
-                  <button type="button" onclick="deleteRecord('${r.id}', 'feeding', '${hiveNum}')" class="btn-small" style="background:#dc2626; color:white;">🗑️</button>
-                </td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>`;
+    container.innerHTML = `<div class="table-scroll-container"><table class="data-table"><thead><tr><th>Data</th><th>Ul</th><th>Ilość (kg)</th><th>Uwagi</th><th>Akcje</th></tr></thead><tbody>${data.map(r => `
+      <tr>
+        <td><b>${fd(r.timestamp)}</b> ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td>
+        <td>Ul ${r.hiveNum}</td><td><b>${r.kgCukru || '0'} kg</b></td><td>${r.uwagi || '-'}</td>
+        <td><button type="button" onclick="editRecord('${r.id}', 'feeding')" class="btn-small">✏️</button> <button type="button" onclick="deleteRecord('${r.id}', 'feeding', '${hiveNum}')" class="btn-small" style="background:#dc2626; color:white;">🗑️</button></td>
+      </tr>`).join('')}</tbody></table></div>`;
   } else if (type === 'treatment') {
-    container.innerHTML = `
-      <div class="table-scroll-container">
-        <table class="data-table">
-          <thead><tr><th>Data</th><th>Ul</th><th>Preparat / Metoda</th><th>Dawka / Uwagi</th><th>Akcje</th></tr></thead>
-          <tbody>
-            ${data.map(r => `
-              <tr>
-                <td><b>${fd(r.timestamp)}</b> ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td>
-                <td>Ul ${r.hiveNum}</td><td><b>${r.preparat || '-'}</b></td><td>${r.uwagi || '-'}</td>
-                <td>
-                  <button type="button" onclick="editRecord('${r.id}', 'treatment')" class="btn-small">✏️</button>
-                  <button type="button" onclick="deleteRecord('${r.id}', 'treatment', '${hiveNum}')" class="btn-small" style="background:#dc2626; color:white;">🗑️</button>
-                </td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>`;
+    container.innerHTML = `<div class="table-scroll-container"><table class="data-table"><thead><tr><th>Data</th><th>Ul</th><th>Preparat</th><th>Uwagi</th><th>Akcje</th></tr></thead><tbody>${data.map(r => `
+      <tr>
+        <td><b>${fd(r.timestamp)}</b> ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td>
+        <td>Ul ${r.hiveNum}</td><td><b>${r.preparat || '-'}</b></td><td>${r.uwagi || '-'}</td>
+        <td><button type="button" onclick="editRecord('${r.id}', 'treatment')" class="btn-small">✏️</button> <button type="button" onclick="deleteRecord('${r.id}', 'treatment', '${hiveNum}')" class="btn-small" style="background:#dc2626; color:white;">🗑️</button></td>
+      </tr>`).join('')}</tbody></table></div>`;
   } else if (type === 'izo') {
-    container.innerHTML = `
-      <div class="table-scroll-container">
-        <table class="data-table">
-          <thead><tr><th>Data</th><th>Ul</th><th>Operacja</th><th>Po ramce</th><th>Kiedy leczyć (+24 dni)</th><th>Akcje</th></tr></thead>
-          <tbody>
-            ${data.map(r => `
-              <tr>
-                <td><b>${fd(r.timestamp)}</b> ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td>
-                <td>Ul ${r.hiveNum}</td><td><b>${r.izoType || '-'}</b></td><td>Ramka ${r.ramka || '-'}</td>
-                <td style="color:#dc2626; font-weight:bold;">${formatToPLDate(r.kiedyLeczyc) || '-'}</td>
-                <td>
-                  <button type="button" onclick="editRecord('${r.id}', 'izo')" class="btn-small">✏️</button>
-                  <button type="button" onclick="deleteRecord('${r.id}', 'izo', '${hiveNum}')" class="btn-small" style="background:#dc2626; color:white;">🗑️</button>
-                </td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>`;
+    container.innerHTML = `<div class="table-scroll-container"><table class="data-table"><thead><tr><th>Data</th><th>Ul</th><th>Operacja</th><th>Po ramce</th><th>Kiedy leczyć</th><th>Akcje</th></tr></thead><tbody>${data.map(r => `
+      <tr>
+        <td><b>${fd(r.timestamp)}</b> ${r.syncStatus === 'pending_save' ? '🟠' : ''}</td>
+        <td>Ul ${r.hiveNum}</td><td><b>${r.izoType || '-'}</b></td><td>Ramka ${r.ramka || '-'}</td>
+        <td style="color:#dc2626; font-weight:bold;">${formatToPLDate(r.kiedyLeczyc) || '-'}</td>
+        <td><button type="button" onclick="editRecord('${r.id}', 'izo')" class="btn-small">✏️</button> <button type="button" onclick="deleteRecord('${r.id}', 'izo', '${hiveNum}')" class="btn-small" style="background:#dc2626; color:white;">🗑️</button></td>
+      </tr>`).join('')}</tbody></table></div>`;
   }
-}
-
-function buildTodoItemHTML(t) {
-  const isDone = isTodoDone(t);
-  const standalone = isStandaloneNote(t);
-  const strike = isDone ? 'text-decoration: line-through; color: #6b7280;' : '';
-  const boxMark = isDone ? '✓' : '&nbsp;';
-  const boxStyle = isDone 
-    ? 'background:#059669; color:white; border:2px solid #047857;' 
-    : 'background:white; color:#111827; border:2px solid #d97706;';
-
-  const targetBadgeLabel = getTodoTargetLabel(t);
-  const isWholeApiary = standalone && String(t.matka || '').toUpperCase().includes('PASIEKA');
-  const badgeColor = isWholeApiary
-    ? 'background:#d1fae5; color:#065f46; border:1px solid #34d399;' 
-    : 'background:#fef3c7; color:#92400e; border:1px solid #f59e0b;';
-  const typeLabel = standalone ? '📝 Niezależna notatka' : '📋 Notatka z przeglądu';
-  const statusBadge = isDone 
-    ? '<span style="background:#059669; color:#fff; padding:2px 8px; border-radius:4px; font-size:0.75rem; font-weight:bold;">✅ WYKONANE</span>'
-    : '<span style="background:#f59e0b; color:#fff; padding:2px 8px; border-radius:4px; font-size:0.75rem; font-weight:bold;">⏳ DO ZROBIENIA</span>';
-  const textClean = cleanTodoText(t.przyszleDzialania);
-
-  return `<li style="padding: 12px 14px; border: 1px solid ${isDone ? '#a7f3d0' : '#fde68a'}; display:flex; align-items:center; gap:12px; background:${isDone ? '#f0fdf4' : '#fffbeb'}; margin-bottom:8px; border-radius:8px; flex-wrap:wrap;">
-    <button type="button" onclick="toggleTodo('${t.id}')" style="width:36px; height:36px; font-weight:900; font-size:1.15rem; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; ${boxStyle}" title="Zmień status (Wykonane / Niewykonane)">
-      ${boxMark}
-    </button>
-    <div style="flex:1; min-width:200px;">
-      <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:4px;">
-        ${statusBadge}
-        <span style="${badgeColor} padding:2px 8px; border-radius:6px; font-weight:bold; font-size:0.85rem;">${targetBadgeLabel}</span>
-        <span style="font-size:0.78rem; color:#374151; background:#e5e7eb; padding:2px 6px; border-radius:4px;">${typeLabel}</span>
-        <small style="color:#4b5563; font-weight:bold;">📅 ${fd(t.timestamp)} ${t.syncStatus === 'pending_save' ? '🟠' : ''}</small>
-      </div>
-      <div style="font-weight:700; font-size:1.02rem; word-break:break-word; ${strike}">${textClean}</div>
-    </div>
-    <div style="display:flex; gap:6px; align-items:center;">
-      <button type="button" onclick="toggleTodo('${t.id}')" class="btn-small" style="background:${isDone ? '#f59e0b' : '#059669'}; color:white; font-weight:bold;">
-        ${isDone ? '↩ Oznacz jako Niewykonane' : '✓ Oznacz jako Wykonane'}
-      </button>
-      <button type="button" onclick="editRecord('${t.id}', 'inspection')" class="btn-small" title="Edytuj">✏️</button>
-      <button type="button" onclick="deleteRecord('${t.id}', 'inspection')" class="btn-small" style="background:#dc2626; color:white;" title="Usuń">🗑️</button>
-    </div>
-  </li>`;
-}
-
-function renderTodos() {
-  const ulTasks = document.getElementById('todo-list-tasks');
-  if (!ulTasks) return;
-
-  let allTodos = state.inspections.filter(i => {
-    if (i.syncStatus === 'pending_delete') return false;
-    if (isQueenRecord(i)) return false;
-    const val = cleanTodoText(i.przyszleDzialania);
-    const lower = val.toLowerCase();
-    return val.length > 0 && lower !== '0' && lower !== 'brak' && lower !== 'brak planów' && lower !== 'brak planu' && lower !== 'brak uwag' && lower !== 'brak dzialan' && lower !== 'brak działań' && lower !== 'nie' && lower !== '-';
-  });
-
-  const sortedList = allTodos.slice().sort((a, b) => {
-    const doneA = isTodoDone(a) ? 1 : 0;
-    const doneB = isTodoDone(b) ? 1 : 0;
-    if (doneA !== doneB) return doneA - doneB; // Niewykonane wyżej
-    return new Date(b.timestamp) - new Date(a.timestamp);
-  });
-
-  const countTotalEl = document.getElementById('count-todo-total');
-  if (countTotalEl) countTotalEl.innerText = sortedList.length;
-
-  if (sortedList.length === 0) {
-    ulTasks.innerHTML = '<li style="padding:14px; color:#6b7280; font-style:italic;">Brak zapisanych zadań z przeglądów i notatek.</li>';
-  } else {
-    ulTasks.innerHTML = sortedList.map(t => buildTodoItemHTML(t)).join('');
-  }
-}
-
-function isTodoDone(recordOrId) {
-  let rec = typeof recordOrId === 'object' ? recordOrId : state.inspections.find(r => r.id === recordOrId);
-  if (rec) {
-    if (String(rec.przyszleDzialania || '').trim().toUpperCase().startsWith('[X]')) return true;
-    if (isStandaloneNote(rec) && rec.dzialania === 'WYKONANE') return true;
-    if (isStandaloneNote(rec) && rec.dzialania === 'DO ZROBIENIA') return false;
-  }
-  const id = typeof recordOrId === 'object' ? recordOrId.id : recordOrId;
-  try { return localStorage.getItem('todo_done_' + id) === 'true'; } catch (e) { return false; }
-}
-
-async function toggleTodo(id) {
-  const rec = state.inspections.find(r => r.id === id);
-  if (!rec) return;
-
-  const currentlyDone = isTodoDone(rec);
-  const newDone = !currentlyDone;
-  const cleanText = cleanTodoText(rec.przyszleDzialania);
-
-  rec.przyszleDzialania = newDone ? `[X] ${cleanText}` : cleanText;
-  if (isStandaloneNote(rec)) {
-    rec.dzialania = newDone ? 'WYKONANE' : 'DO ZROBIENIA';
-  }
-  rec.updatedAt = Date.now().toString();
-  rec.syncStatus = 'pending_save';
-
-  try { localStorage.setItem('todo_done_' + id, newDone.toString()); } catch (e) {}
-
-  await saveLocalRecord('inspection', rec);
-  await loadStateFromLocal();
-  showToast(newDone ? "Oznaczono jako WYKONANE (Zrobione) ✅" : "Oznaczono jako NIEWYKONANE (Do zrobienia) ⏳", "info");
-  if (navigator.onLine) syncData(false);
 }
 
 function showToast(msg, type = 'info') {
